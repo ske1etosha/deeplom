@@ -44,7 +44,7 @@ edge_index = torch.tensor(
 print("Загрузка Pointer-GNN модели...")
 in_channels = x_base.shape[1] + 2
 model = PointerGNN(in_channels=in_channels, hidden_channels=64)
-model.load_state_dict(torch.load('.Close-to-the-Truth-For-Test-GPT_new_model\py\pointer_gnn_model.pt', map_location='cpu'))
+model.load_state_dict(torch.load('.gnn_routing_For-Test-GPT\py\pointer_gnn_model.pt', map_location='cpu'))
 model.eval()
 print("Модель готова к предсказаниям")
 
