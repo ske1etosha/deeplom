@@ -35,6 +35,26 @@
             </button>
         </div>
         
+        <div class="route-controls">
+            <h3>Параметры маршрута:</h3>
+            <div>
+                <label for="algorithm-select">Алгоритм маршрутизации:</label>
+                <select id="algorithm-select">
+                    <option value="gnn">GNN</option>
+                    <option value="ant">Муравьиный</option>
+                    <option value="genetic">Генетический</option>
+                    <option value="clarke">Кларка-Райта</option>
+                </select>
+            </div>
+            <div>
+                <label for="max-containers">Макс. контейнеров на машину:</label>
+                <input type="number" id="max-containers" min="1" max="50" value="10" style="width: 50px; padding: 5px;">
+            </div>
+            <div class="route-info" id="route-info">
+                Маршруты не построены
+            </div>
+        </div>
+
         <div class="legend">
             <div class="legend-item">
                 <span class="fill-indicator" style="background: #4CAF50;"></span> Менее 40%

@@ -8,6 +8,7 @@ async function optimizeRoutes() {
     }
 
     const maxContainers = parseInt(document.getElementById("max-containers").value) || 20;
+    const algorithm = document.getElementById("algorithm-select").value;
 
     if (maxContainers <= 0 || isNaN(maxContainers)) {
         alert("Пожалуйста, укажите корректную вместимость мусоровоза!");
@@ -15,37 +16,60 @@ async function optimizeRoutes() {
     }
 
     try {
-        const response = await fetch('http://localhost:5000/gnn-optimize', {
+        let endpoint;
+        const baseUrl = 'http://localhost:5000'; // Базовый URL Flask сервера
+        
+        switch(algorithm) {
+            case 'ant':
+                endpoint = `${baseUrl}/api/route/ant_colony`;
+                break;
+            case 'genetic':
+                endpoint = `${baseUrl}/api/route/genetic`;
+                break;
+            case 'clarke':
+                endpoint = `${baseUrl}/api/route/clarke_wright`;
+                break;
+            case 'gnn':
+                endpoint = `${baseUrl}/gnn-optimize`;
+                break;
+            default:
+                throw new Error('Неизвестный алгоритм');
+        }
+
+        const response = await fetch(endpoint, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ containers, maxContainers })
+            headers: { 
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify({ 
+                containers: containers, 
+                maxContainers: maxContainers 
+            })
         });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
 
         const data = await response.json();
 
-        if (data.error) {
-            alert("Ошибка от сервера: " + data.error);
-            return;
-        }
-
         if (!data.routes || data.routes.length === 0) {
-            alert("GNN не вернула ни одного маршрута.");
+            alert("Алгоритм не вернул ни одного маршрута.");
             return;
         }
 
         routes = data.routes.map((r, i) => {
-            // собираем контейнеры, привязанные к узлам маршрута:
             const containersForRoute = containers.filter(c =>
-              r.nodes.includes(c.nearest_node)
+                r.nodes.includes(c.nearest_node)
             );
             return {
-              index: i,
-              containers: containersForRoute,
-              routePoints: r.points,
-              color: getRouteColor(i)
+                index: i,
+                containers: containersForRoute,
+                routePoints: r.points,
+                color: getRouteColor(i)
             };
         });
-        
 
         console.log("Маршруты получены:", routes);
         clearMap();
@@ -53,8 +77,8 @@ async function optimizeRoutes() {
         showRoute(0);
 
     } catch (err) {
-        console.error(err);
-        alert("Ошибка при обращении к серверу GNN: " + err.message);
+        console.error("Ошибка при оптимизации маршрута:", err);
+        alert("Ошибка при оптимизации маршрута: " + err.message);
     }
 }
 

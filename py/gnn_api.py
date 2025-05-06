@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import json
+from typing import List, Dict, Tuple
+import os
 import osmnx as ox
 import networkx as nx
 import numpy as np
@@ -9,10 +10,18 @@ import torch
 import torch.nn.functional as F
 from torch_geometric.data import Data
 from pointer_model import PointerGNN
+from algorithms import RouteAlgorithms
 
 # === Инициализация приложения ===
 app = Flask(__name__)
 CORS(app)
+
+# Получаем абсолютный путь к директории скрипта
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Инициализация алгоритмов с правильным путем
+CONTAINERS_PATH = os.path.join(BASE_DIR, '..', 'data', 'updated_containers.json')
+route_algorithms = RouteAlgorithms(CONTAINERS_PATH)
 
 # === Загружаем дорожной граф и данные ===
 CITY = "Улан-Удэ, Россия"
@@ -44,7 +53,7 @@ edge_index = torch.tensor(
 print("Загрузка Pointer-GNN модели...")
 in_channels = x_base.shape[1] + 2
 model = PointerGNN(in_channels=in_channels, hidden_channels=64)
-model.load_state_dict(torch.load('.gnn_routing_For-Test-GPT\py\pointer_gnn_model.pt', map_location='cpu'))
+model.load_state_dict(torch.load('py\pointer_gnn_model.pt', map_location='cpu'))
 model.eval()
 print("Модель готова к предсказаниям")
 
@@ -133,6 +142,38 @@ def gnn_optimize():
     except Exception as e:
         print("Ошибка в /gnn-optimize:", e)
         return jsonify({'error': str(e)}), 500
+
+# Добавляем новые эндпоинты
+@app.route('/api/route/ant_colony', methods=['POST'])
+def ant_colony_route():
+    try:
+        data = request.get_json()
+        max_containers = data.get('max_containers', 20)
+        result = route_algorithms.ant_colony_optimization()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/route/genetic', methods=['POST'])
+def genetic_route():
+    try:
+        data = request.get_json()
+        max_containers = data.get('max_containers', 20)
+        result = route_algorithms.genetic_algorithm()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/route/clarke_wright', methods=['POST'])
+def clarke_wright_route():
+    try:
+        data = request.get_json()
+        max_containers = data.get('max_containers', 20)
+        result = route_algorithms.clarke_wright()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
