@@ -11,10 +11,17 @@ import torch.nn.functional as F
 from torch_geometric.data import Data
 from pointer_model import PointerGNN
 from algorithms import RouteAlgorithms
+import pickle
+from datetime import datetime, timedelta
 
 # === Инициализация приложения ===
 app = Flask(__name__)
 CORS(app)
+
+# Настройки кэша
+CACHE_DIR = "graph_cache"
+CACHE_FILE = os.path.join(CACHE_DIR, "ulan_ude_graph.pickle")
+CACHE_EXPIRE_DAYS = 7
 
 # Получаем абсолютный путь к директории скрипта
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -23,13 +30,38 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CONTAINERS_PATH = os.path.join(BASE_DIR, '..', 'data', 'updated_containers.json')
 route_algorithms = RouteAlgorithms(CONTAINERS_PATH)
 
+#==========================================Оптимизация=============================================#
+def load_or_download_graph():
+    # Создаем директорию для кэша если ее нет
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    
+    # Пробуем загрузить из кэша
+    if os.path.exists(CACHE_FILE):
+        mod_time = datetime.fromtimestamp(os.path.getmtime(CACHE_FILE))
+        if datetime.now() - mod_time < timedelta(days=CACHE_EXPIRE_DAYS):
+            with open(CACHE_FILE, 'rb') as f:
+                print("Загружаем граф из кэша...")
+                return pickle.load(f)
+    
+    # Если кэш устарел или отсутствует - качаем заново
+    print("Загрузка графа OSM (это может занять несколько минут)...")
+    graph = ox.graph_from_place(CITY, network_type='drive', simplify=True)
+    
+    # Сохраняем в кэш
+    with open(CACHE_FILE, 'wb') as f:
+        pickle.dump(graph, f)
+    
+    return graph
+
 # === Загружаем дорожной граф и данные ===
 CITY = "Улан-Удэ, Россия"
 print("Загрузка графа OSM для", CITY)
-G_road = ox.graph_from_place(CITY, network_type='drive', simplify=True)
+G_road = load_or_download_graph()
 nodes_gdf = ox.graph_to_gdfs(G_road, nodes=True, edges=False)
 nodes_list = list(G_road.nodes())
 
+
+#==================================================================================================#
 # Координаты узлов для KDTree
 node_coords = np.array([[row.y, row.x] for row in nodes_gdf.itertuples()])
 tree = KDTree(node_coords)
@@ -148,8 +180,10 @@ def gnn_optimize():
 def ant_colony_route():
     try:
         data = request.get_json()
-        max_containers = data.get('max_containers', 20)
+        max_containers = data.get('maxContainers', 20)
         result = route_algorithms.ant_colony_optimization()
+        if 'error' in result:
+            return jsonify({'error': result['error']}), 500
         return jsonify(result)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -168,8 +202,10 @@ def genetic_route():
 def clarke_wright_route():
     try:
         data = request.get_json()
-        max_containers = data.get('max_containers', 20)
+        max_containers = data.get('maxContainers', 20)
         result = route_algorithms.clarke_wright()
+        if 'error' in result:
+            return jsonify({'error': result['error']}), 500
         return jsonify(result)
     except Exception as e:
         return jsonify({'error': str(e)}), 500

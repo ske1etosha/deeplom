@@ -90,88 +90,86 @@ class RouteAlgorithms:
         
         return route_coords
     
-    def ant_colony_optimization(self, n_ants: int = 10, n_iterations: int = 100) -> Dict:
+    def ant_colony_optimization(self, n_ants: int = 10, n_iterations: int = 50) -> Dict:
         nodes = list({c['nearest_node'] for c in self.containers})
         if not nodes:
             return {'routes': []}
-        
-        n = len(nodes)
-        pheromone = {(u, v): 1.0 for u in nodes for v in nodes if u != v}
-        best_path = None
-        best_length = float('inf')
-        
-        for _ in range(n_iterations):
-            paths = []
-            lengths = []
-            
-            for _ in range(n_ants):
-                visited = set()
-                current = random.choice(nodes)
-                visited.add(current)
-                path = [current]
-                length = 0.0
+
+        try:
+            n = len(nodes)
+            if n == 1:
+                return self._single_node_route(nodes[0])
+
+            pheromone = {(u, v): 1.0 for u in nodes for v in nodes if u != v}
+            best_path = None
+            best_length = float('inf')
+
+            for _ in range(n_iterations):
+                paths = []
+                lengths = []
                 
-                while len(path) < n:
-                    unvisited = [v for v in nodes if v not in visited]
-                    if not unvisited:
-                        break
+                for _ in range(n_ants):
+                    visited = set()
+                    current = random.choice(nodes)
+                    visited.add(current)
+                    path = [current]
+                    length = 0.0
                     
-                    probabilities = []
-                    total = 0.0
+                    while len(path) < n:
+                        unvisited = [v for v in nodes if v not in visited]
+                        if not unvisited:
+                            break
+                        
+                        probabilities = []
+                        total = 0.0
+                        
+                        for v in unvisited:
+                            tau = pheromone.get((current, v), 1.0)
+                            eta = 1.0 / (self.distance_matrix.get((current, v), 1e9) + 1e-10)
+                            p = tau * eta
+                            probabilities.append(p)
+                            total += p
+                        
+                        if total == 0:
+                            next_node = random.choice(unvisited)
+                        else:
+                            probabilities = [p / total for p in probabilities]
+                            next_node = np.random.choice(unvisited, p=probabilities)
+                        
+                        path.append(next_node)
+                        length += self.distance_matrix.get((current, next_node), 1e9)
+                        visited.add(next_node)
+                        current = next_node
                     
-                    for v in unvisited:
-                        tau = pheromone[(current, v)]
-                        eta = 1.0 / (self.distance_matrix.get((current, v), 1e9) + 1e-10)
-                        p = tau * eta
-                        probabilities.append(p)
-                        total += p
-                    
-                    if total == 0:
-                        next_node = random.choice(unvisited)
-                    else:
-                        probabilities = [p / total for p in probabilities]
-                        next_node = np.random.choice(unvisited, p=probabilities)
-                    
-                    path.append(next_node)
-                    length += self.distance_matrix.get((current, next_node), 1e9)
-                    visited.add(next_node)
-                    current = next_node
+                    if len(path) > 1:
+                        length += self.distance_matrix.get((path[-1], path[0]), 1e9)
+                        paths.append(path)
+                        lengths.append(length)
+                        
+                        if length < best_length:
+                            best_length = length
+                            best_path = path.copy()
                 
-                # Добавляем возврат в начало
-                if len(path) > 1:
-                    length += self.distance_matrix.get((path[-1], path[0]), 1e9)
-                    paths.append(path)
-                    lengths.append(length)
-                    
-                    if length < best_length:
-                        best_length = length
-                        best_path = path.copy()
-            
-            # Обновляем феромоны
-            for u in nodes:
-                for v in nodes:
-                    if u != v:
-                        pheromone[(u, v)] *= 0.5  # Испарение
-            
-            for path, length in zip(paths, lengths):
-                for i in range(len(path)-1):
-                    pheromone[(path[i], path[i+1])] += 1.0 / length
-                if len(path) > 1:
-                    pheromone[(path[-1], path[0])] += 1.0 / length
-        
-        if not best_path:
-            return {'routes': []}
-        
-        route_coords = self.get_route_coordinates(best_path)
-        route_containers = [c for c in self.containers if c['nearest_node'] in best_path]
-        
-        return {
-            'routes': [{
-                'points': route_coords,
-                'nodes': best_path,
-                'containers': route_containers
-            }]
-        }
+                # Обновление феромонов
+                for u in nodes:
+                    for v in nodes:
+                        if u != v:
+                            pheromone[(u, v)] *= 0.5  # Испарение
+                
+                for path, length in zip(paths, lengths):
+                    for i in range(len(path)-1):
+                        pheromone[(path[i], path[i+1])] += 1.0 / length
+                    if len(path) > 1:
+                        pheromone[(path[-1], path[0])] += 1.0 / length
+
+            if not best_path:
+                return {'routes': []}
+
+            return self._format_route_result(best_path)
+
+        except Exception as e:
+            print(f"Ошибка в муравьином алгоритме: {str(e)}")
+            return {'routes': [], 'error': str(e)}
     
     def genetic_algorithm(self, population_size: int = 50, generations: int = 200) -> Dict:
         nodes = list({c['nearest_node'] for c in self.containers})
@@ -243,70 +241,86 @@ class RouteAlgorithms:
         nodes = list({c['nearest_node'] for c in self.containers})
         if not nodes:
             return {'routes': []}
-        
-        depot = nodes[0]  # Первый узел как депо
-        savings = []
-        
-        for i in range(1, len(nodes)):
-            for j in range(i+1, len(nodes)):
-                u, v = nodes[i], nodes[j]
-                saving = (self.distance_matrix.get((depot, u), 1e9) + 
-                         self.distance_matrix.get((depot, v), 1e9) - 
-                         self.distance_matrix.get((u, v), 1e9))
-                savings.append((saving, u, v))
-        
-        savings.sort(reverse=True, key=lambda x: x[0])
-        
-        routes = [[n] for n in nodes[1:]]
-        
-        for saving, u, v in savings:
-            route_u = None
-            route_v = None
+
+        try:
+            if len(nodes) == 1:
+                return self._single_node_route(nodes[0])
+
+            depot = nodes[0]
+            savings = []
             
-            for route in routes:
-                if route[0] == u or route[-1] == u:
-                    route_u = route
-                if route[0] == v or route[-1] == v:
-                    route_v = route
+            for i in range(1, len(nodes)):
+                for j in range(i+1, len(nodes)):
+                    u, v = nodes[i], nodes[j]
+                    saving = (self.distance_matrix.get((depot, u), 1e9) + 
+                            self.distance_matrix.get((depot, v), 1e9) - 
+                            self.distance_matrix.get((u, v), 1e9))
+                    savings.append((saving, u, v))
             
-            if route_u is not route_v:
-                if route_u[-1] == u and route_v[0] == v:
-                    new_route = route_u + route_v
-                elif route_u[0] == u and route_v[-1] == v:
-                    new_route = route_v + route_u
-                elif route_u[-1] == u and route_v[-1] == v:
-                    new_route = route_u + route_v[::-1]
-                elif route_u[0] == u and route_v[0] == v:
-                    new_route = route_v[::-1] + route_u
-                else:
-                    continue
+            savings.sort(reverse=True, key=lambda x: x[0])
+            
+            routes = [[n] for n in nodes[1:]]
+            
+            for saving, u, v in savings:
+                route_u, route_v = None, None
                 
-                if len(new_route) == len(nodes)-1:
-                    final_route = [depot] + new_route + [depot]
-                    route_coords = self.get_route_coordinates(final_route)
-                    route_containers = [c for c in self.containers if c['nearest_node'] in final_route]
-                    
-                    return {
-                        'routes': [{
-                            'points': route_coords,
-                            'nodes': final_route,
-                            'containers': route_containers
-                        }]
-                    }
+                for route in routes:
+                    if route[0] == u or route[-1] == u:
+                        route_u = route
+                    if route[0] == v or route[-1] == v:
+                        route_v = route
                 
-                routes.remove(route_u)
-                routes.remove(route_v)
-                routes.append(new_route)
-        
-        # Если не удалось объединить все маршруты
-        final_route = [depot] + routes[0] + [depot]
-        route_coords = self.get_route_coordinates(final_route)
-        route_containers = [c for c in self.containers if c['nearest_node'] in final_route]
+                if route_u is not None and route_v is not None and route_u is not route_v:
+                    # Логика объединения маршрутов
+                    new_route = self._merge_routes(route_u, route_v, u, v)
+                    if new_route:
+                        routes.remove(route_u)
+                        routes.remove(route_v)
+                        routes.append(new_route)
+                        if len(routes) == 1:
+                            break
+            
+            final_route = [depot] + routes[0] + [depot] if routes else [depot, depot]
+            return self._format_route_result(final_route)
+
+        except Exception as e:
+            print(f"Ошибка в алгоритме Кларка-Райта: {str(e)}")
+            return {'routes': [], 'error': str(e)}
+    #==============================Вспомогалтельные функции======================================№  
+    def _merge_routes(self, route1, route2, u, v):
+        """Вспомогательная функция для объединения маршрутов"""
+        if route1[-1] == u and route2[0] == v:
+            return route1 + route2
+        elif route1[0] == u and route2[-1] == v:
+            return route2 + route1
+        elif route1[-1] == u and route2[-1] == v:
+            return route1 + route2[::-1]
+        elif route1[0] == u and route2[0] == v:
+            return route2[::-1] + route1
+        return None
+
+    def _format_route_result(self, route_nodes):
+        """Форматирование результата для всех алгоритмов"""
+        route_coords = self.get_route_coordinates(route_nodes)
+        route_containers = [c for c in self.containers if c['nearest_node'] in route_nodes]
         
         return {
             'routes': [{
                 'points': route_coords,
-                'nodes': final_route,
+                'nodes': route_nodes,
+                'containers': route_containers
+            }]
+        }
+
+    def _single_node_route(self, node):
+        """Обработка случая с одним узлом"""
+        route_coords = self.get_route_coordinates([node, node])
+        route_containers = [c for c in self.containers if c['nearest_node'] == node]
+        
+        return {
+            'routes': [{
+                'points': route_coords,
+                'nodes': [node, node],
                 'containers': route_containers
             }]
         }
