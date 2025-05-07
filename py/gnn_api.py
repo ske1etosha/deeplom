@@ -217,26 +217,20 @@ def gnn_optimize():
 def ant_colony_route():
     """Endpoint для муравьиного алгоритма"""
     try:
-        if route_algorithms is None:
-            return jsonify({'error': 'Алгоритмы еще не инициализированы'}), 503
-            
-        data = request.get_json()
-        max_containers = data.get('maxContainers', 20)
+        print("Запуск муравьиного алгоритма")  # Логирование
         result = route_algorithms.ant_colony_optimization()
+        #print("Результат муравьиного алгоритма:", result)  # Логирование
         return jsonify(result)
     except Exception as e:
+        print("Ошибка в муравьином алгоритме:", str(e))  # Логирование
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/route/genetic', methods=['POST'])
 def genetic_route():
-    """Endpoint для генетического алгоритма"""
     try:
-        print("Запуск муравьиного алгоритма")  # Логирование
-        result = route_algorithms.ant_colony_optimization()
-        print("Результат муравьиного алгоритма:", result)  # Логирование
+        result = route_algorithms.genetic_algorithm()
         return jsonify(result)
     except Exception as e:
-        print("Ошибка в муравьином алгоритме:", str(e))  # Логирование
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/route/clarke_wright', methods=['POST'])
