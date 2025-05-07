@@ -89,88 +89,160 @@ class RouteAlgorithms:
                 print(f"Ошибка построения пути от {u} к {v}: {e}")
         
         return route_coords
-    
-    def ant_colony_optimization(self, n_ants: int = 10, n_iterations: int = 50) -> Dict:
+#==================================Муравьиный=======================#
+    def ant_colony_optimization(self, n_ants: int = 10, n_iterations: int = 100) -> Dict:
+        # Получаем уникальные узлы из контейнеров
         nodes = list({c['nearest_node'] for c in self.containers})
-        if not nodes:
+        
+        # Проверяем, что есть хотя бы 2 узла для маршрута
+        if len(nodes) < 2:
             return {'routes': []}
 
-        try:
-            n = len(nodes)
-            if n == 1:
-                return self._single_node_route(nodes[0])
+        # Инициализируем переменные для лучшего маршрута
+        best_path = None
+        best_length = float('inf')  # Явная инициализация
+        
+        # Проверяем и заполняем матрицу расстояний
+        for u in nodes:
+            for v in nodes:
+                if u != v and (u, v) not in self.distance_matrix:
+                    # Если путь между узлами отсутствует, используем большое число
+                    self.distance_matrix[(u, v)] = 1e9
 
-            pheromone = {(u, v): 1.0 for u in nodes for v in nodes if u != v}
-            best_path = None
-            best_length = float('inf')
+        # Инициализация феромонов
+        pheromone = {}
+        for u in nodes:
+            for v in nodes:
+                if u != v:
+                    # Начальное значение феромона обратно пропорционально расстоянию
+                    pheromone[(u, v)] = 1.0 / (self.distance_matrix.get((u, v), 1e9) + 1e-10)
 
-            for _ in range(n_iterations):
-                paths = []
-                lengths = []
-                
-                for _ in range(n_ants):
-                    visited = set()
-                    current = random.choice(nodes)
-                    visited.add(current)
-                    path = [current]
-                    length = 0.0
+        # Основной цикл алгоритма
+        for iteration in range(n_iterations):
+            ant_paths = []
+            ant_lengths = []
+
+            # Каждый муравей строит свой маршрут
+            for _ in range(n_ants):
+                current_node = random.choice(nodes)
+                path = [current_node]
+                visited = {current_node}
+                path_length = 0.0
+
+                # Пока не посетим все узлы
+                while len(path) < len(nodes):
+                    unvisited = [v for v in nodes if v not in visited]
+                    if not unvisited:
+                        break
+
+                    # Рассчитываем вероятности перехода
+                    probabilities = []
+                    total = 0.0
                     
-                    while len(path) < n:
-                        unvisited = [v for v in nodes if v not in visited]
-                        if not unvisited:
-                            break
-                        
-                        probabilities = []
-                        total = 0.0
-                        
-                        for v in unvisited:
-                            tau = pheromone.get((current, v), 1.0)
-                            eta = 1.0 / (self.distance_matrix.get((current, v), 1e9) + 1e-10)
-                            p = tau * eta
-                            probabilities.append(p)
-                            total += p
-                        
-                        if total == 0:
-                            next_node = random.choice(unvisited)
-                        else:
-                            probabilities = [p / total for p in probabilities]
-                            next_node = np.random.choice(unvisited, p=probabilities)
-                        
-                        path.append(next_node)
-                        length += self.distance_matrix.get((current, next_node), 1e9)
-                        visited.add(next_node)
-                        current = next_node
-                    
-                    if len(path) > 1:
-                        length += self.distance_matrix.get((path[-1], path[0]), 1e9)
-                        paths.append(path)
-                        lengths.append(length)
-                        
-                        if length < best_length:
-                            best_length = length
-                            best_path = path.copy()
-                
-                # Обновление феромонов
-                for u in nodes:
-                    for v in nodes:
-                        if u != v:
-                            pheromone[(u, v)] *= 0.5  # Испарение
-                
-                for path, length in zip(paths, lengths):
-                    for i in range(len(path)-1):
-                        pheromone[(path[i], path[i+1])] += 1.0 / length
-                    if len(path) > 1:
-                        pheromone[(path[-1], path[0])] += 1.0 / length
+                    for v in unvisited:
+                        tau = pheromone[(current_node, v)]
+                        eta = 1.0 / (self.distance_matrix[(current_node, v)] + 1e-10)
+                        p = tau * eta
+                        probabilities.append(p)
+                        total += p
 
-            if not best_path:
-                return {'routes': []}
+                    # Выбираем следующий узел
+                    if total <= 0:
+                        next_node = random.choice(unvisited)
+                    else:
+                        probabilities = [p/total for p in probabilities]
+                        next_node = np.random.choice(unvisited, p=probabilities)
 
-            return self._format_route_result(best_path)
+                    # Обновляем маршрут
+                    path.append(next_node)
+                    path_length += self.distance_matrix[(current_node, next_node)]
+                    visited.add(next_node)
+                    current_node = next_node
 
-        except Exception as e:
-            print(f"Ошибка в муравьином алгоритме: {str(e)}")
-            return {'routes': [], 'error': str(e)}
-    
+                # Добавляем возврат в начало
+                if len(path) > 1:
+                    path_length += self.distance_matrix[(path[-1], path[0])]
+                    ant_paths.append(path)
+                    ant_lengths.append(path_length)
+
+                    # Обновляем лучший маршрут
+                    if path_length < best_length:
+                        best_length = path_length
+                        best_path = path.copy()
+
+            # Испарение феромонов
+            for u in nodes:
+                for v in nodes:
+                    if u != v:
+                        pheromone[(u, v)] *= 0.5
+
+            # Обновление феромонов на маршрутах муравьев
+            for path, length in zip(ant_paths, ant_lengths):
+                for i in range(len(path)-1):
+                    pheromone[(path[i], path[i+1])] += 1.0 / (length + 1e-10)
+                if len(path) > 1:
+                    pheromone[(path[-1], path[0])] += 1.0 / (length + 1e-10)
+
+        # Если не нашли ни одного маршрута
+        if best_path is None:
+            return {'routes': []}
+
+        # Получаем координаты маршрута и связанные контейнеры
+        route_coords = self.get_route_coordinates(best_path)
+        route_containers = [c for c in self.containers if c['nearest_node'] in best_path]
+
+        print(f"Best path: {best_path}")  # Должен быть list[int]
+        print(f"Route coords type: {type(route_coords)}")  # Должен быть list[list[float]]
+        print(f"Containers sample: {route_containers[:1]}")  # Проверка структуры
+
+        response = {
+            'routes': [{
+                'points': [[float(x), float(y)] for x, y in route_coords],
+                'nodes': [int(node) for node in best_path],
+                'containers': [
+                    {
+                        'id': int(c['id']),
+                        'latitude': float(c['latitude']),
+                        'longitude': float(c['longitude']),
+                        # ... остальные поля ...
+                    } 
+                    for c in route_containers
+                ]
+            }]
+        }
+
+        print("Final response:", response)  # Проверка перед возвратом
+        return response
+
+    # def _format_route_result(self, route_nodes):
+    #     """Форматирование результата для всех алгоритмов"""
+    #     try:
+    #         route_coords = self.get_route_coordinates(route_nodes)
+    #         route_containers = [self._prepare_container_data(c) 
+    #                           for c in self.containers 
+    #                           if c['nearest_node'] in route_nodes]
+            
+    #         return {
+    #             'routes': [{
+    #                 'points': route_coords,
+    #                 'nodes': [int(node) for node in route_nodes],  # Явное преобразование
+    #                 'containers': route_containers
+    #             }]
+    #         }
+    #     except Exception as e:
+    #         print(f"Ошибка форматирования маршрута: {str(e)}")
+    #         return {'routes': [], 'error': str(e)}
+
+    # def _prepare_container_data(self, container):
+    #     """Подготавливает данные контейнера для JSON сериализации"""
+    #     return {
+    #         'id': int(container['id']),
+    #         'latitude': float(container['latitude']),
+    #         'longitude': float(container['longitude']),
+    #         'nearest_node': int(container['nearest_node']),
+    #         'fill_percentage': float(container.get('fill_percentage', 0))
+    #     }
+ #==================================Муравьиный=======================#       
     def genetic_algorithm(self, population_size: int = 50, generations: int = 200) -> Dict:
         nodes = list({c['nearest_node'] for c in self.containers})
         if not nodes:

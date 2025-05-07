@@ -21,6 +21,10 @@ async function optimizeRoutes() {
         
         switch(algorithm) {
             case 'ant':
+                console.log("Отправляемые данные:", {
+                    containers: containers,
+                    maxContainers: maxContainers
+                  });
                 endpoint = `${baseUrl}/api/route/ant_colony`;
                 break;
             case 'genetic':
