@@ -99,17 +99,41 @@ function updateRouteSelector() {
     });
 }
 
+// function showRoute(index) {
+//     if (!routes[index]) {
+//         alert("Выбранный маршрут не найден.");
+//         return;
+//     }
+
+//     currentRouteIndex = index;
+//     const route = routes[index];
+
+//     clearMap();
+
+//     const polyline = new ymaps.Polyline(route.routePoints, {}, {
+//         strokeColor: route.color,
+//         strokeWidth: 5,
+//         strokeOpacity: 0.8
+//     });
+//     map.geoObjects.add(polyline);
+
+//     route.containers.forEach(container => {
+//         addPlacemark(container);
+//     });
+
+//     updateContainerList(route.containers);
+// }
 function showRoute(index) {
     if (!routes[index]) {
         alert("Выбранный маршрут не найден.");
         return;
     }
 
-    currentRouteIndex = index;
     const route = routes[index];
-
+    currentRouteIndex = index;
     clearMap();
 
+    // Отрисовываем линию маршрута
     const polyline = new ymaps.Polyline(route.routePoints, {}, {
         strokeColor: route.color,
         strokeWidth: 5,
@@ -117,11 +141,17 @@ function showRoute(index) {
     });
     map.geoObjects.add(polyline);
 
-    route.containers.forEach(container => {
+    // Отрисовываем все контейнеры (без изменений стиля)
+    containers.forEach(container => {
         addPlacemark(container);
     });
 
     updateContainerList(route.containers);
+    
+    // Центрируем карту на маршруте
+    if (route.routePoints.length > 0) {
+        map.setBounds(polyline.geometry.getBounds());
+    }
 }
 
 function getRouteColor(index) {
