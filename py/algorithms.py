@@ -191,9 +191,9 @@ class RouteAlgorithms:
         route_coords = self.get_route_coordinates(best_path)
         route_containers = [c for c in self.containers if c['nearest_node'] in best_path]
 
-        print(f"Best path: {best_path}")  # Должен быть list[int]
-        print(f"Route coords type: {type(route_coords)}")  # Должен быть list[list[float]]
-        print(f"Containers sample: {route_containers[:1]}")  # Проверка структуры
+        # print(f"Best path: {best_path}")  # Должен быть list[int]
+        # print(f"Route coords type: {type(route_coords)}")  # Должен быть list[list[float]]
+        # print(f"Containers sample: {route_containers[:1]}")  # Проверка структуры
 
         response = {
             'routes': [{
@@ -211,7 +211,7 @@ class RouteAlgorithms:
             }]
         }
 
-        print("Final response:", response)  # Проверка перед возвратом
+        # print("Final response:", response)  # Проверка перед возвратом
         return response
 
     # def _format_route_result(self, route_nodes):
