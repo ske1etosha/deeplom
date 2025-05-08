@@ -404,9 +404,7 @@ class RouteAlgorithms:
         self.gnn_model.eval()
         
     def gnn_optimize(self, containers=None):
-
         start_time = time.time()
-
         try:
             if not hasattr(self, 'x_base') or self.x_base is None:
                 self._init_gnn_model()  # Явная инициализация при необходимости
@@ -464,7 +462,7 @@ class RouteAlgorithms:
                 'execution_time': execution_time,
                 **metrics
                 }
-            print(f"Metrics: {metrics}")
+
             return result
         except Exception as e:
             print("Ошибка в GNN оптимизации:", e)
