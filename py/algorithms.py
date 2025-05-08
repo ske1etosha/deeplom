@@ -8,6 +8,12 @@ from itertools import combinations
 from scipy.spatial import KDTree
 import networkx as nx
 import osmnx as ox
+import torch
+import torch.nn.functional as F
+from torch_geometric.data import Data
+import os
+import pickle
+from datetime import datetime, timedelta
 
 class RouteAlgorithms:
     def __init__(self, json_file: str, city: str = "Улан-Удэ, Россия"):
@@ -20,6 +26,9 @@ class RouteAlgorithms:
         self.tree = KDTree(self.node_coords)
         self.attach_nearest_nodes()
         self.distance_matrix = self.calculate_distance_matrix()
+        self.x_base = None
+        self.edge_index = None
+        self.gnn_model = None
 
     def load_containers(self, json_file: str) -> List[Dict]:
         try:
@@ -39,11 +48,13 @@ class RouteAlgorithms:
         print(f"Загрузка графа OSM для {self.city}")
         return ox.graph_from_place(self.city, network_type='drive', simplify=True)
 
-    def attach_nearest_nodes(self):
-        cont_coords = np.array([[c['latitude'], c['longitude']] for c in self.containers])
+    def attach_nearest_nodes(self, containers=None):
+        containers = containers or self.containers
+        cont_coords = np.array([[c['latitude'], c['longitude']] for c in containers])
         _, idxs = self.tree.query(cont_coords)
-        for i, c in enumerate(self.containers):
+        for i, c in enumerate(containers):
             c['nearest_node'] = self.nodes_list[idxs[i]]
+        return containers
 
     def calculate_distance_matrix(self) -> Dict[Tuple[int, int], float]:
         distance_matrix = {}
@@ -56,14 +67,11 @@ class RouteAlgorithms:
                         distance = nx.shortest_path_length(self.G_road, u, v, weight='length')
                         distance_matrix[(u, v)] = distance
                     except:
-                        # Если нет пути, используем большое число
                         distance_matrix[(u, v)] = 1e9
-
         return distance_matrix
 
     def get_route_coordinates(self, route_nodes: List[int]) -> List[List[float]]:
         route_coords = []
-
         for u, v in zip(route_nodes, route_nodes[1:]):
             try:
                 path = nx.shortest_path(self.G_road, u, v, weight='length')
@@ -87,55 +95,42 @@ class RouteAlgorithms:
                             route_coords.append([y_b, x_b])
             except Exception as e:
                 print(f"Ошибка построения пути от {u} к {v}: {e}")
-
         return route_coords
-#==================================Муравьиный=======================#
-    def ant_colony_optimization(self, n_ants: int = 10, n_iterations: int = 100) -> Dict:
-        # Получаем уникальные узлы из контейнеров
-        nodes = list({c['nearest_node'] for c in self.containers})
 
-        # Проверяем, что есть хотя бы 2 узла для маршрута
+    def ant_colony_optimization(self, n_ants: int = 10, n_iterations: int = 100) -> Dict:
+        nodes = list({c['nearest_node'] for c in self.containers})
         if len(nodes) < 2:
             return {'routes': []}
 
-        # Инициализируем переменные для лучшего маршрута
         best_path = None
-        best_length = float('inf')  # Явная инициализация
+        best_length = float('inf')
 
-        # Проверяем и заполняем матрицу расстояний
         for u in nodes:
             for v in nodes:
                 if u != v and (u, v) not in self.distance_matrix:
-                    # Если путь между узлами отсутствует, используем большое число
                     self.distance_matrix[(u, v)] = 1e9
 
-        # Инициализация феромонов
         pheromone = {}
         for u in nodes:
             for v in nodes:
                 if u != v:
-                    # Начальное значение феромона обратно пропорционально расстоянию
                     pheromone[(u, v)] = 1.0 / (self.distance_matrix.get((u, v), 1e9) + 1e-10)
 
-        # Основной цикл алгоритма
         for iteration in range(n_iterations):
             ant_paths = []
             ant_lengths = []
 
-            # Каждый муравей строит свой маршрут
             for _ in range(n_ants):
                 current_node = random.choice(nodes)
                 path = [current_node]
                 visited = {current_node}
                 path_length = 0.0
 
-                # Пока не посетим все узлы
                 while len(path) < len(nodes):
                     unvisited = [v for v in nodes if v not in visited]
                     if not unvisited:
                         break
 
-                    # Рассчитываем вероятности перехода
                     probabilities = []
                     total = 0.0
 
@@ -146,54 +141,42 @@ class RouteAlgorithms:
                         probabilities.append(p)
                         total += p
 
-                    # Выбираем следующий узел
                     if total <= 0:
                         next_node = random.choice(unvisited)
                     else:
                         probabilities = [p/total for p in probabilities]
                         next_node = np.random.choice(unvisited, p=probabilities)
 
-                    # Обновляем маршрут
                     path.append(next_node)
                     path_length += self.distance_matrix[(current_node, next_node)]
                     visited.add(next_node)
                     current_node = next_node
 
-                # Добавляем возврат в начало
                 if len(path) > 1:
                     path_length += self.distance_matrix[(path[-1], path[0])]
                     ant_paths.append(path)
                     ant_lengths.append(path_length)
 
-                    # Обновляем лучший маршрут
                     if path_length < best_length:
                         best_length = path_length
                         best_path = path.copy()
 
-            # Испарение феромонов
             for u in nodes:
                 for v in nodes:
                     if u != v:
                         pheromone[(u, v)] *= 0.5
 
-            # Обновление феромонов на маршрутах муравьев
             for path, length in zip(ant_paths, ant_lengths):
                 for i in range(len(path)-1):
                     pheromone[(path[i], path[i+1])] += 1.0 / (length + 1e-10)
                 if len(path) > 1:
                     pheromone[(path[-1], path[0])] += 1.0 / (length + 1e-10)
 
-        # Если не нашли ни одного маршрута
         if best_path is None:
             return {'routes': []}
 
-        # Получаем координаты маршрута и связанные контейнеры
         route_coords = self.get_route_coordinates(best_path)
         route_containers = [c for c in self.containers if c['nearest_node'] in best_path]
-
-        # print(f"Best path: {best_path}")  # Должен быть list[int]
-        # print(f"Route coords type: {type(route_coords)}")  # Должен быть list[list[float]]
-        # print(f"Containers sample: {route_containers[:1]}")  # Проверка структуры
 
         response = {
             'routes': [{
@@ -204,45 +187,13 @@ class RouteAlgorithms:
                         'id': int(c['id']),
                         'latitude': float(c['latitude']),
                         'longitude': float(c['longitude']),
-                        # ... остальные поля ...
                     }
                     for c in route_containers
                 ]
             }]
         }
-
-        # print("Final response:", response)  # Проверка перед возвратом
         return response
 
-    # def _format_route_result(self, route_nodes):
-    #     """Форматирование результата для всех алгоритмов"""
-    #     try:
-    #         route_coords = self.get_route_coordinates(route_nodes)
-    #         route_containers = [self._prepare_container_data(c)
-    #                           for c in self.containers
-    #                           if c['nearest_node'] in route_nodes]
-
-    #         return {
-    #             'routes': [{
-    #                 'points': route_coords,
-    #                 'nodes': [int(node) for node in route_nodes],  # Явное преобразование
-    #                 'containers': route_containers
-    #             }]
-    #         }
-    #     except Exception as e:
-    #         print(f"Ошибка форматирования маршрута: {str(e)}")
-    #         return {'routes': [], 'error': str(e)}
-
-    # def _prepare_container_data(self, container):
-    #     """Подготавливает данные контейнера для JSON сериализации"""
-    #     return {
-    #         'id': int(container['id']),
-    #         'latitude': float(container['latitude']),
-    #         'longitude': float(container['longitude']),
-    #         'nearest_node': int(container['nearest_node']),
-    #         'fill_percentage': float(container.get('fill_percentage', 0))
-    #     }
- #==================================Муравьиный=======================#
     def genetic_algorithm(self, population_size: int = 50, generations: int = 200) -> Dict:
         nodes = list({c['nearest_node'] for c in self.containers})
         if not nodes:
@@ -278,7 +229,7 @@ class RouteAlgorithms:
             return child
 
         def mutate(individual):
-            if random.random() < 0.1:  # Вероятность мутации
+            if random.random() < 0.1:
                 i, j = random.sample(range(len(individual)), 2)
                 individual[i], individual[j] = individual[j], individual[i]
             return individual
@@ -287,10 +238,10 @@ class RouteAlgorithms:
 
         for _ in range(generations):
             population = sorted(population, key=calculate_fitness, reverse=True)
-            next_generation = population[:5]  # Элитные особи
+            next_generation = population[:5]
 
             for _ in range(population_size - 5):
-                parent1, parent2 = random.choices(population[:20], k=2)  # Турнирный отбор
+                parent1, parent2 = random.choices(population[:20], k=2)
                 child = crossover(parent1, parent2)
                 child = mutate(child)
                 next_generation.append(child)
@@ -343,7 +294,6 @@ class RouteAlgorithms:
                         route_v = route
 
                 if route_u is not None and route_v is not None and route_u is not route_v:
-                    # Логика объединения маршрутов
                     new_route = self._merge_routes(route_u, route_v, u, v)
                     if new_route:
                         routes.remove(route_u)
@@ -358,9 +308,82 @@ class RouteAlgorithms:
         except Exception as e:
             print(f"Ошибка в алгоритме Кларка-Райта: {str(e)}")
             return {'routes': [], 'error': str(e)}
-    #==============================Вспомогалтельные функции======================================№
+
+    def _init_gnn_model(self):
+        from pointer_model import PointerGNN
+        
+        node_features = []
+        for node in self.nodes_list:
+            data = self.G_road.nodes[node]
+            lat, lon = data['y'], data['x']
+            deg = self.G_road.degree[node]
+            node_features.append([lat, lon, deg, 0.0])
+        self.x_base = torch.tensor(node_features, dtype=torch.float)
+        
+        self.edge_index = torch.tensor(
+            [[self.nodes_list.index(u), self.nodes_list.index(v)] for u, v in self.G_road.edges()],
+            dtype=torch.long
+        ).t().contiguous()
+        
+        self.gnn_model = PointerGNN(
+            in_channels=self.x_base.shape[1] + 2,
+            hidden_channels=64
+        )
+        model_path = 'py\pointer_gnn_model.pt'
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(f"Модель не найдена по пути: {model_path}")
+        self.gnn_model.load_state_dict(torch.load('py\pointer_gnn_model.pt', map_location='cpu'))
+        self.gnn_model.eval()
+        
+    def gnn_optimize(self, containers=None):
+        try:
+            if not hasattr(self, 'x_base') or self.x_base is None:
+                self._init_gnn_model()  # Явная инициализация при необходимости
+
+            if containers is None:
+                containers = self.containers
+                
+            containers = self.attach_nearest_nodes(containers)
+            pick_nodes = list({c['nearest_node'] for c in containers})
+            if not pick_nodes:
+                return {'routes': []}
+
+            current = pick_nodes[0]
+            remaining = set(pick_nodes) - {current}
+            route = [current]
+
+            while remaining:
+                mask = torch.tensor(
+                    [1 if n in remaining else 0 for n in self.nodes_list],
+                    dtype=torch.float
+                )
+                is_curr = torch.tensor(
+                    [1 if n == current else 0 for n in self.nodes_list],
+                    dtype=torch.float
+                )
+                x_aug = torch.cat([self.x_base, is_curr.unsqueeze(1), mask.unsqueeze(1)], dim=1)
+                graph_data = Data(x=x_aug, edge_index=self.edge_index)
+                graph_data.batch = torch.zeros(graph_data.x.size(0), dtype=torch.long)
+
+                with torch.no_grad():
+                    logits = self.gnn_model(graph_data).squeeze(0)
+                    probs = F.softmax(logits, dim=0)
+                
+                idxs = [self.nodes_list.index(n) for n in remaining]
+                best_idx = idxs[torch.argmax(probs[idxs]).item()]
+                next_node = self.nodes_list[best_idx]
+
+                route.append(next_node)
+                remaining.remove(next_node)
+                current = next_node
+
+            return self._format_route_result(route)
+
+        except Exception as e:
+            print("Ошибка в GNN оптимизации:", e)
+            return {'routes': [], 'error': str(e)}
+
     def _merge_routes(self, route1, route2, u, v):
-        """Вспомогательная функция для объединения маршрутов"""
         if route1[-1] == u and route2[0] == v:
             return route1 + route2
         elif route1[0] == u and route2[-1] == v:
@@ -372,7 +395,6 @@ class RouteAlgorithms:
         return None
 
     def _format_route_result(self, route_nodes):
-        """Форматирование результата для всех алгоритмов"""
         route_coords = self.get_route_coordinates(route_nodes)
         route_containers = [c for c in self.containers if c['nearest_node'] in route_nodes]
 
@@ -385,7 +407,6 @@ class RouteAlgorithms:
         }
 
     def _single_node_route(self, node):
-        """Обработка случая с одним узлом"""
         route_coords = self.get_route_coordinates([node, node])
         route_containers = [c for c in self.containers if c['nearest_node'] == node]
 
