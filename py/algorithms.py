@@ -1,10 +1,7 @@
 import json
 import random
-import math
 import numpy as np
 from typing import List, Dict, Tuple
-import copy
-from itertools import combinations
 from scipy.spatial import KDTree
 import networkx as nx
 import osmnx as ox
@@ -12,8 +9,7 @@ import torch
 import torch.nn.functional as F
 from torch_geometric.data import Data
 import os
-import pickle
-from datetime import datetime, timedelta
+import time
 
 class RouteAlgorithms:
     def __init__(self, json_file: str, city: str = "Улан-Удэ, Россия"):
@@ -29,6 +25,32 @@ class RouteAlgorithms:
         self.x_base = None
         self.edge_index = None
         self.gnn_model = None
+
+    def calculate_metrics(self, route_nodes):
+        """Вычисляет метрики для маршрута"""
+        if not route_nodes or len(route_nodes) < 2:
+            return {
+                'distance': 0,
+                'estimated_time': 0,
+                'containers_served': 0
+            }
+        
+        # Расчет общего расстояния
+        total_distance = 0
+        for i in range(len(route_nodes)-1):
+            total_distance += self.distance_matrix.get((route_nodes[i], route_nodes[i+1]), 0)
+        
+        # Расчет времени (предположим скорость 40 км/ч ~ 11.11 м/с)
+        speed_mps = 11.11  # метров в секунду
+        unloading_time_per_container = 15 * 60  # 15 минут в секундах
+        travel_time = total_distance / speed_mps
+        total_time = travel_time + (len(route_nodes) * unloading_time_per_container)
+        
+        return {
+            'distance': total_distance,  # в метрах
+            'estimated_time': total_time,  # в секундах
+            'containers_served': len(route_nodes)
+        }
 
     def load_containers(self, json_file: str) -> List[Dict]:
         try:
@@ -96,8 +118,10 @@ class RouteAlgorithms:
             except Exception as e:
                 print(f"Ошибка построения пути от {u} к {v}: {e}")
         return route_coords
-
+#=======================================Муравьиный=============================================#
     def ant_colony_optimization(self, n_ants: int = 10, n_iterations: int = 100) -> Dict:
+        start_time = time.time()
+
         nodes = list({c['nearest_node'] for c in self.containers})
         if len(nodes) < 2:
             return {'routes': []}
@@ -178,6 +202,9 @@ class RouteAlgorithms:
         route_coords = self.get_route_coordinates(best_path)
         route_containers = [c for c in self.containers if c['nearest_node'] in best_path]
 
+        execution_time = time.time() - start_time
+        metrics = self.calculate_metrics(best_path)
+
         response = {
             'routes': [{
                 'points': [[float(x), float(y)] for x, y in route_coords],
@@ -190,11 +217,18 @@ class RouteAlgorithms:
                     }
                     for c in route_containers
                 ]
-            }]
+            }],
+            'metrics': {
+                'execution_time': execution_time,  # время работы алгоритма
+                **metrics  # остальные метрики
+            }
         }
         return response
-
+#=======================================Генетический=============================================#
     def genetic_algorithm(self, population_size: int = 50, generations: int = 200) -> Dict:
+        
+        start_time = time.time()
+
         nodes = list({c['nearest_node'] for c in self.containers})
         if not nodes:
             return {'routes': []}
@@ -252,62 +286,96 @@ class RouteAlgorithms:
         route_coords = self.get_route_coordinates(best_individual)
         route_containers = [c for c in self.containers if c['nearest_node'] in best_individual]
 
-        return {
-            'routes': [{
-                'points': route_coords,
-                'nodes': best_individual,
-                'containers': route_containers
-            }]
-        }
+        execution_time = time.time() - start_time
+        metrics = self.calculate_metrics(best_individual)
 
+        return {
+        'routes': [{
+            'points': route_coords,
+            'nodes': best_individual,
+            'containers': route_containers
+        }],
+        'metrics': {
+            'execution_time': execution_time,
+            **metrics
+        }
+    }
+#=======================================Муравьиный=============================================#
     def clarke_wright(self) -> Dict:
+
+        start_time = time.time()
+
         nodes = list({c['nearest_node'] for c in self.containers})
         if not nodes:
-            return {'routes': []}
+                return {'routes': [], 'metrics': {
+                'execution_time': 0,
+                'distance': 0,
+                'estimated_time': 0,
+                'containers_served': 0
+            }}
 
         try:
             if len(nodes) == 1:
                 return self._single_node_route(nodes[0])
+            else:
+                depot = nodes[0]
+                savings = []
 
-            depot = nodes[0]
-            savings = []
+                for i in range(1, len(nodes)):
+                    for j in range(i+1, len(nodes)):
+                        u, v = nodes[i], nodes[j]
+                        saving = (self.distance_matrix.get((depot, u), 1e9) +
+                                self.distance_matrix.get((depot, v), 1e9) -
+                                self.distance_matrix.get((u, v), 1e9))
+                        savings.append((saving, u, v))
 
-            for i in range(1, len(nodes)):
-                for j in range(i+1, len(nodes)):
-                    u, v = nodes[i], nodes[j]
-                    saving = (self.distance_matrix.get((depot, u), 1e9) +
-                            self.distance_matrix.get((depot, v), 1e9) -
-                            self.distance_matrix.get((u, v), 1e9))
-                    savings.append((saving, u, v))
+                savings.sort(reverse=True, key=lambda x: x[0])
 
-            savings.sort(reverse=True, key=lambda x: x[0])
+                routes = [[n] for n in nodes[1:]]
 
-            routes = [[n] for n in nodes[1:]]
+                for saving, u, v in savings:
+                    route_u, route_v = None, None
 
-            for saving, u, v in savings:
-                route_u, route_v = None, None
+                    for route in routes:
+                        if route[0] == u or route[-1] == u:
+                            route_u = route
+                        if route[0] == v or route[-1] == v:
+                            route_v = route
 
-                for route in routes:
-                    if route[0] == u or route[-1] == u:
-                        route_u = route
-                    if route[0] == v or route[-1] == v:
-                        route_v = route
+                    if route_u is not None and route_v is not None and route_u is not route_v:
+                        new_route = self._merge_routes(route_u, route_v, u, v)
+                        if new_route:
+                            routes.remove(route_u)
+                            routes.remove(route_v)
+                            routes.append(new_route)
+                            if len(routes) == 1:
+                                break
 
-                if route_u is not None and route_v is not None and route_u is not route_v:
-                    new_route = self._merge_routes(route_u, route_v, u, v)
-                    if new_route:
-                        routes.remove(route_u)
-                        routes.remove(route_v)
-                        routes.append(new_route)
-                        if len(routes) == 1:
-                            break
+                final_route = [depot] + routes[0] + [depot] if routes else [depot, depot]
+                
+                result = self._format_route_result(final_route)
 
-            final_route = [depot] + routes[0] + [depot] if routes else [depot, depot]
-            return self._format_route_result(final_route)
+            execution_time = time.time() - start_time
+            metrics = self.calculate_metrics(result['routes'][0]['nodes'])
+
+            result['metrics'] = {
+                'execution_time': execution_time,
+                **metrics
+            }
+            return result
 
         except Exception as e:
             print(f"Ошибка в алгоритме Кларка-Райта: {str(e)}")
-            return {'routes': [], 'error': str(e)}
+            return {
+                'routes': [], 
+                'error': str(e),
+                'metrics': {
+                    'execution_time': time.time() - start_time,
+                    'distance': 0,
+                    'estimated_time': 0,
+                    'containers_served': 0
+                }
+            }
 
     def _init_gnn_model(self):
         from pointer_model import PointerGNN
@@ -336,6 +404,9 @@ class RouteAlgorithms:
         self.gnn_model.eval()
         
     def gnn_optimize(self, containers=None):
+
+        start_time = time.time()
+
         try:
             if not hasattr(self, 'x_base') or self.x_base is None:
                 self._init_gnn_model()  # Явная инициализация при необходимости
@@ -346,7 +417,15 @@ class RouteAlgorithms:
             containers = self.attach_nearest_nodes(containers)
             pick_nodes = list({c['nearest_node'] for c in containers})
             if not pick_nodes:
-                return {'routes': []}
+                return {
+                    'routes': [],
+                    'metrics': {
+                        'execution_time': time.time() - start_time,
+                        'distance': 0,
+                        'estimated_time': 0,
+                        'containers_served': 0
+                    }
+                }
 
             current = pick_nodes[0]
             remaining = set(pick_nodes) - {current}
@@ -377,11 +456,28 @@ class RouteAlgorithms:
                 remaining.remove(next_node)
                 current = next_node
 
-            return self._format_route_result(route)
+            execution_time = time.time() - start_time
+            result = self._format_route_result(route)
+            metrics = self.calculate_metrics(route)
 
+            result['metrics'] = {
+                'execution_time': execution_time,
+                **metrics
+                }
+            print(f"Metrics: {metrics}")
+            return result
         except Exception as e:
             print("Ошибка в GNN оптимизации:", e)
-            return {'routes': [], 'error': str(e)}
+            return {
+                'routes': [], 
+                'error': str(e),
+                'metrics': {
+                    'execution_time': time.time() - start_time,
+                    'distance': 0,
+                    'estimated_time': 0,
+                    'containers_served': 0
+                }
+            }
 
     def _merge_routes(self, route1, route2, u, v):
         if route1[-1] == u and route2[0] == v:
@@ -397,23 +493,58 @@ class RouteAlgorithms:
     def _format_route_result(self, route_nodes):
         route_coords = self.get_route_coordinates(route_nodes)
         route_containers = [c for c in self.containers if c['nearest_node'] in route_nodes]
-
+        metrics = self.calculate_metrics(route_nodes)
+        
         return {
             'routes': [{
                 'points': route_coords,
                 'nodes': route_nodes,
                 'containers': route_containers
-            }]
+            }],
+            'metrics': metrics
         }
+
 
     def _single_node_route(self, node):
         route_coords = self.get_route_coordinates([node, node])
         route_containers = [c for c in self.containers if c['nearest_node'] == node]
-
+        
         return {
             'routes': [{
                 'points': route_coords,
                 'nodes': [node, node],
                 'containers': route_containers
-            }]
+            }],
+            'metrics': {
+                'distance': 0,
+                'estimated_time': 15 * 60,  # только время выгрузки
+                'containers_served': 1
+            }
+        }
+    
+    # В класс RouteAlgorithms добавляем новые методы
+    def split_containers(self, n_routes=4):
+        """Разделяет контейнеры на n маршрутов"""
+        containers = sorted(self.containers, key=lambda x: x['fill_percentage'], reverse=True)
+        return [containers[i::n_routes] for i in range(n_routes)]
+
+    def calculate_metrics(self, route_nodes):
+        """Вычисляет метрики для маршрута"""
+        if not route_nodes or len(route_nodes) < 2:
+            return {'distance': 0, 'time': 0}
+        
+        total_distance = 0
+        for i in range(len(route_nodes)-1):
+            total_distance += self.distance_matrix.get((route_nodes[i], route_nodes[i+1]), 0)
+        
+        # Предположим: скорость 40 км/ч = ~11.11 м/с и время выгрузки 5 мин на контейнер
+        speed_mps = 11.11
+        unloading_time = 5 * 60  # секунды
+        
+        total_time = (total_distance / speed_mps) + (len(route_nodes) * unloading_time)
+        
+        return {
+            'distance': total_distance,
+            'time': total_time,
+            'containers_served': len(route_nodes)
         }

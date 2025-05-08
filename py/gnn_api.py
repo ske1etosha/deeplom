@@ -54,7 +54,6 @@ def gnn_optimize():
     try:
         data = request.get_json()
         containers = data.get('containers', [])
-        max_containers = data.get('maxContainers', 20)
         
         result = route_algorithms.gnn_optimize(containers)
         return jsonify(result)
@@ -84,7 +83,6 @@ def genetic_route():
 def clarke_wright_route():
     try:
         data = request.get_json()
-        max_containers = data.get('maxContainers', 20)
         result = route_algorithms.clarke_wright()
         return jsonify(result)
     except Exception as e:
