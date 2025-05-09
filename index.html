@@ -7,7 +7,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <link rel="stylesheet" href="css/style.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- <script src="https://cdn.jsdelivr.net/npm/chart.js"></script> -->
 </head>
 <body>
     <div id="menu-overlay"></div>
@@ -35,6 +35,9 @@
                 <i class="fas fa-route"></i> Оптимизировать
             </button>
         </div>
+        <button class="btn btn-secondary" id="analyze-btn">
+            <i class="fas fa-chart-line"></i> Анализ
+        </button>
         
         <div class="route-controls">
             <h3>Параметры маршрута:</h3>
@@ -72,14 +75,6 @@
                     <span class="stat-value" id="containers-count">-</span>
                 </div>
             </div>
-            <div class="chart-wrapper">
-                <h4>Сравнение алгоритмов</h4>
-                <canvas id="time-comparison-chart" class="chart-canvas"></canvas>
-            </div>
-            <div class="chart-wrapper">
-                <h4>Эффективность маршрута</h4>
-                <canvas id="route-efficiency-chart" class="chart-canvas"></canvas>
-            </div>
         </div>
 
 
@@ -106,6 +101,6 @@
     <script src="js/map.js"></script>
     <script src="js/routes.js"></script>
     <script src="js/app.js"></script>
-    <script src="js/charts.js"></script>
+    <!-- <script src="js/charts.js"></script> -->
 </body>
 </html>

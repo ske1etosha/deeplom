@@ -95,7 +95,6 @@ async function optimizeRoutes() {
         clearMap();
         updateRouteStats(data, getAlgorithmName(algorithm));
         showRoute(0);
-        updateCharts(data);
 
     } catch (err) {
         console.error("Ошибка при оптимизации маршрута:", err);
@@ -151,7 +150,6 @@ function showRoute(index) {
         } else {
             console.warn("Маршрут не содержит данных о контейнерах");
         }
-        updateCharts(routes[index]);
 
     } catch (error) {
         console.error("Ошибка при отображении маршрута:", error);
@@ -189,4 +187,55 @@ function getAlgorithmName(value) {
         'clarke': 'Кларка-Райта'
     };
     return names[value] || value;
+}
+
+document.getElementById('analyze-btn').addEventListener('click', async function() {
+    if (containers.length === 0) {
+        alert('Нет контейнеров для анализа');
+        return;
+    }
+
+    const analysisData = {};
+    const algorithms = ['gnn', 'ant', 'genetic', 'clarke'];
+    
+    try {
+        // Показываем индикатор загрузки
+        this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Анализ...';
+        this.disabled = true;
+        
+        // Запускаем все алгоритмы
+        for (const algorithm of algorithms) {
+            const endpoint = getAlgorithmEndpoint(algorithm);
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ containers: containers })
+            });
+            analysisData[algorithm] = await response.json();
+        }
+        
+        // Сохраняем данные для страницы анализа
+        localStorage.setItem('analysisData', JSON.stringify(analysisData));
+        
+        // Переходим на страницу анализа
+        window.location.href = 'analysis.html';
+        
+    } catch (error) {
+        console.error('Ошибка анализа:', error);
+        alert('Ошибка при выполнении анализа');
+    } finally {
+        this.innerHTML = '<i class="fas fa-chart-line"></i> Анализ';
+        this.disabled = false;
+    }
+});
+
+function getAlgorithmEndpoint(algorithm) {
+    const baseUrl = 'http://localhost:5000';
+    switch(algorithm) {
+        case 'ant': return `${baseUrl}/api/route/ant_colony`;
+        case 'genetic': return `${baseUrl}/api/route/genetic`;
+        case 'clarke': return `${baseUrl}/api/route/clarke_wright`;
+        case 'gnn': return `${baseUrl}/gnn-optimize`;
+        default: throw new Error('Неизвестный алгоритм');
+    }
 }

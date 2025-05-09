@@ -341,3 +341,13 @@ body {
     width: 100% !important;
     height: 250px !important;
 }
+
+#analyze-btn {
+    margin-top: 10px;
+    width: 100%;
+}
+
+.fa-spinner {
+    margin-right: 8px;
+}
+
