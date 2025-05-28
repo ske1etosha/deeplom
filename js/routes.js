@@ -1,5 +1,6 @@
 let routes = [];
 let currentRouteIndex = -1;
+let selectedFileName = null;
 
 async function optimizeRoutes() {
     if (containers.length === 0) {
@@ -37,7 +38,8 @@ async function optimizeRoutes() {
                 'Accept': 'application/json'
             },
             body: JSON.stringify({ 
-                containers: containers
+                containers: containers,
+                fileName: selectedFileName
             })
         });
 

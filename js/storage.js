@@ -29,7 +29,7 @@ async function loadFromJSON() {
         input.addEventListener("change", async (event) => {
             const file = event.target.files[0];
             if (!file) return resolve(null);
-
+            selectedFileName = file.name;
             try {
                 const content = await file.text();
                 const loadedData = JSON.parse(content);
@@ -52,7 +52,6 @@ async function loadFromJSON() {
                 resolve(null);
             }
         });
-
         input.click();
     });
 }

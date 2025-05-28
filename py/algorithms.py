@@ -376,7 +376,7 @@ class RouteAlgorithms:
                     'containers_served': 0
                 }
             }
-
+#==================================
     def _init_gnn_model(self):
         from pointer_model import PointerGNN
         

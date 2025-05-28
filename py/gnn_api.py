@@ -3,7 +3,7 @@ from flask_cors import CORS
 import os
 from threading import Thread, Event
 from algorithms import RouteAlgorithms
-import time
+
 
 # === Конфигурация ===
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -14,7 +14,6 @@ app = Flask(__name__)
 CORS(app)
 
 # Глобальные переменные
-route_algorithms = None
 initialization_complete = Event()
 
 def background_initialization():
@@ -23,7 +22,7 @@ def background_initialization():
     print("Начало фоновой инициализации...")
     
     try:
-        route_algorithms = RouteAlgorithms(CONTAINERS_PATH)
+        #route_algorithms = RouteAlgorithms(CONTAINERS_PATH)
         initialization_complete.set()
         print("Фоновая инициализация завершена")
     except Exception as e:
@@ -54,7 +53,14 @@ def gnn_optimize():
     try:
         data = request.get_json()
         containers = data.get('containers', [])
-        
+        file_name = data.get('fileName')  
+        if not file_name:
+            return jsonify({'error': 'Файл с контейнерами не указан'}), 400
+        json_path = os.path.join(BASE_DIR, '..', 'data', file_name)
+        if not os.path.isfile(json_path):
+            return jsonify({'error': f'Файл не найден: {file_name}'}), 400
+        route_algorithms = RouteAlgorithms(json_path)
+
         result = route_algorithms.gnn_optimize(containers)
         return jsonify(result)
         
@@ -65,6 +71,15 @@ def gnn_optimize():
 @app.route('/api/route/ant_colony', methods=['POST'])
 def ant_colony_route():
     try:
+        data = request.get_json()
+        file_name = data.get('fileName')  
+        if not file_name:
+            return jsonify({'error': 'Файл с контейнерами не указан'}), 400
+        json_path = os.path.join(BASE_DIR, '..', 'data', file_name)
+        if not os.path.isfile(json_path):
+            return jsonify({'error': f'Файл не найден: {file_name}'}), 400
+        route_algorithms = RouteAlgorithms(json_path)
+
         result = route_algorithms.ant_colony_optimization()
         return jsonify(result)
     except Exception as e:
@@ -74,6 +89,15 @@ def ant_colony_route():
 @app.route('/api/route/genetic', methods=['POST'])
 def genetic_route():
     try:
+        data = request.get_json()
+        file_name = data.get('fileName')  
+        if not file_name:
+            return jsonify({'error': 'Файл с контейнерами не указан'}), 400
+        json_path = os.path.join(BASE_DIR, '..', 'data', file_name)
+        if not os.path.isfile(json_path):
+            return jsonify({'error': f'Файл не найден: {file_name}'}), 400
+        route_algorithms = RouteAlgorithms(json_path)
+
         result = route_algorithms.genetic_algorithm()
         return jsonify(result)
     except Exception as e:
@@ -83,6 +107,14 @@ def genetic_route():
 def clarke_wright_route():
     try:
         data = request.get_json()
+        file_name = data.get('fileName')  
+        if not file_name:
+            return jsonify({'error': 'Файл с контейнерами не указан'}), 400
+        json_path = os.path.join(BASE_DIR, '..', 'data', file_name)
+        if not os.path.isfile(json_path):
+            return jsonify({'error': f'Файл не найден: {file_name}'}), 400
+        route_algorithms = RouteAlgorithms(json_path)
+
         result = route_algorithms.clarke_wright()
         return jsonify(result)
     except Exception as e:
