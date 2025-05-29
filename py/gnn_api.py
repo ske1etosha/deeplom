@@ -120,6 +120,49 @@ def clarke_wright_route():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/analysis', methods=['POST'])
+def analysis():
+    try:
+        data = request.get_json()
+        file_name = data.get('fileName')
+        
+        if not file_name:
+            return jsonify({'error': 'Файл с контейнерами не указан'}), 400
+            
+        json_path = os.path.join(BASE_DIR, '..', 'data', file_name)
+        if not os.path.isfile(json_path):
+            return jsonify({'error': f'Файл не найден: {file_name}'}), 400
+        
+        # Создаем экземпляр RouteAlgorithms с указанным файлом
+        route_algorithms = RouteAlgorithms(json_path)
+        
+        # Запускаем все алгоритмы параллельно для ускорения
+        from concurrent.futures import ThreadPoolExecutor
+        
+        results = {}
+        
+        with ThreadPoolExecutor() as executor:
+            # Запускаем все алгоритмы
+            futures = {
+                'ant_colony': executor.submit(route_algorithms.ant_colony_optimization),
+                'genetic': executor.submit(route_algorithms.genetic_algorithm),
+                'clarke_wright': executor.submit(route_algorithms.clarke_wright),
+                'gnn': executor.submit(route_algorithms.gnn_optimize, data.get('containers', []))
+            }
+            
+            # Ждем завершения всех алгоритмов
+            for name, future in futures.items():
+                try:
+                    results[name] = future.result()
+                except Exception as e:
+                    results[name] = {'error': str(e)}
+        
+        return jsonify(results)
+        
+    except Exception as e:
+        print(f"Ошибка в /api/analysis: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+    
 @app.route('/health')
 def health_check():
     """Проверка состояния сервера"""

@@ -11,26 +11,7 @@ async function optimizeRoutes() {
     const algorithm = document.getElementById("algorithm-select").value;
 
     try {
-        let endpoint;
-        const baseUrl = 'http://localhost:5000'; // Базовый URL Flask сервера
-        
-        switch(algorithm) {
-            case 'ant':
-                endpoint = `${baseUrl}/api/route/ant_colony`;
-                break;
-            case 'genetic':
-                endpoint = `${baseUrl}/api/route/genetic`;
-                break;
-            case 'clarke':
-                endpoint = `${baseUrl}/api/route/clarke_wright`;
-                break;
-            case 'gnn':
-                endpoint = `${baseUrl}/gnn-optimize`;
-                break;
-            default:
-                throw new Error('Неизвестный алгоритм');
-        }
-
+        const endpoint = getAlgorithmEndpoint(algorithm);
         const response = await fetch(endpoint, {
             method: 'POST',
             headers: { 
@@ -48,29 +29,6 @@ async function optimizeRoutes() {
         }
 
         const data = await response.json();
-
-        // if (!data.routes || data.routes.length === 0) {
-        //     alert("Алгоритм не вернул ни одного маршрута.");
-        //     return;
-        // }
-
-        // routes = data.routes.map((r, i) => {
-        //     const containersForRoute = containers.filter(c =>
-        //         r.nodes.includes(c.nearest_node)
-        //     );
-        //     return {
-        //         index: i,
-        //         containers: containersForRoute,
-        //         routePoints: r.points,
-        //         color: getRouteColor(i),
-        //         metrics: data.metrics || {
-        //             distance: 0,
-        //             estimated_time: 0,
-        //             containers_served: 0,
-        //             execution_time: 0
-        //         }
-        //     };
-        // });
 
         if (!data.routes || data.routes.length === 0) {
             alert("Алгоритм не вернул ни одного маршрута.");
@@ -101,6 +59,17 @@ async function optimizeRoutes() {
     } catch (err) {
         console.error("Ошибка при оптимизации маршрута:", err);
         alert("Ошибка при оптимизации маршрута: " + err.message);
+    }
+}
+
+function getAlgorithmEndpoint(algorithm) {
+    const baseUrl = 'http://localhost:5000';
+    switch(algorithm) {
+        case 'ant': return `${baseUrl}/api/route/ant_colony`;
+        case 'genetic': return `${baseUrl}/api/route/genetic`;
+        case 'clarke': return `${baseUrl}/api/route/clarke_wright`;
+        case 'gnn': return `${baseUrl}/gnn-optimize`;
+        default: throw new Error('Неизвестный алгоритм');
     }
 }
 
@@ -177,7 +146,7 @@ function updateRouteStats(routeData, algorithmName) {
     document.getElementById('algorithm-name').textContent = algorithmName;
     document.getElementById('distance-value').textContent = `${(metrics.distance / 1000).toFixed(2)} км`;
     document.getElementById('execution-time').textContent = `${metrics.execution_time.toFixed(2)} сек`;
-    document.getElementById('total-time').textContent = formatTime(metrics.estimated_time);
+    //document.getElementById('total-time').textContent = formatTime(metrics.estimated_time);
     document.getElementById('containers-count').textContent = `${metrics.containers_served} из ${containers.length}`;
 }
 
@@ -197,34 +166,24 @@ document.getElementById('analyze-btn').addEventListener('click', async function(
         return;
     }
 
-    const analysisData = {};
-    const algorithms = ['gnn', 'ant', 'genetic', 'clarke'];
-    
     try {
         // Показываем индикатор загрузки
         this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Анализ...';
         this.disabled = true;
         
-        // Запускаем все алгоритмы
-        for (const algorithm of algorithms) {
-            const endpoint = getAlgorithmEndpoint(algorithm);
-            const response = await fetch(endpoint, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ containers: containers })
-            });
-            analysisData[algorithm] = await response.json();
-        }
-        
-        // Сохраняем данные для страницы анализа
-        localStorage.setItem('analysisData', JSON.stringify(analysisData));
+        // Сохраняем параметры запроса для использования на странице анализа
+        const requestData = {
+            fileName: selectedFileName,
+            containers: containers
+        };
+        localStorage.setItem('analysisRequestData', JSON.stringify(requestData));
         
         // Переходим на страницу анализа
         window.location.href = 'analysis.html';
         
     } catch (error) {
         console.error('Ошибка анализа:', error);
-        alert('Ошибка при выполнении анализа');
+        alert('Ошибка при выполнении анализа: ' + error.message);
     } finally {
         this.innerHTML = '<i class="fas fa-chart-line"></i> Анализ';
         this.disabled = false;
