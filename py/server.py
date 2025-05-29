@@ -7,7 +7,7 @@ from algorithms import RouteAlgorithms
 
 # === Конфигурация ===
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-CONTAINERS_PATH = os.path.join(BASE_DIR, '..', 'data', 'updated_containers.json')
+#CONTAINERS_PATH = os.path.join(BASE_DIR, '..', 'data', 'updated_containers.json')
 
 # === Инициализация приложения ===
 app = Flask(__name__)

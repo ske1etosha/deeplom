@@ -378,7 +378,7 @@ class RouteAlgorithms:
             }
 #==================================
     def _init_gnn_model(self):
-        from pointer_model import PointerGNN
+        from train_model import PointerGNN
         
         node_features = []
         for node in self.nodes_list:
@@ -397,10 +397,10 @@ class RouteAlgorithms:
             in_channels=self.x_base.shape[1] + 2,
             hidden_channels=64
         )
-        model_path = 'py\pointer_gnn_model.pt'
+        model_path = 'train_model\pointer_gnn_model.pt'
         if not os.path.exists(model_path):
             raise FileNotFoundError(f"Модель не найдена по пути: {model_path}")
-        self.gnn_model.load_state_dict(torch.load('py\pointer_gnn_model.pt', map_location='cpu'))
+        self.gnn_model.load_state_dict(torch.load('train_model\pointer_gnn_model.pt', map_location='cpu'))
         self.gnn_model.eval()
         
     def gnn_optimize(self, containers=None):
