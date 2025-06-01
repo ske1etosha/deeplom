@@ -133,20 +133,53 @@ function getRouteColor(index) {
     return colors[index % colors.length];
 }
 
+// function updateRouteStats(routeData, algorithmName) {
+//     if (!routeData || !routeData.metrics) return;
+    
+//     const metrics = routeData.metrics;
+//     const formatTime = (seconds) => {
+//         const mins = Math.floor(seconds / 60);
+//         const secs = Math.round(seconds % 60);
+//         return `${mins} мин ${secs} сек`;
+//     };
+
+//     document.getElementById('algorithm-name').textContent = algorithmName;
+//     document.getElementById('distance-value').textContent = `${(metrics.distance / 1000).toFixed(2)} км`;
+//     document.getElementById('execution-time').textContent = `${metrics.execution_time.toFixed(2)} сек`;
+//     document.getElementById('total-time').textContent = formatTime(metrics.estimated_time);
+//     document.getElementById('containers-count').textContent = `${metrics.containers_served} из ${containers.length}`;
+// }
 function updateRouteStats(routeData, algorithmName) {
     if (!routeData || !routeData.metrics) return;
     
     const metrics = routeData.metrics;
+    
+    // Форматирование времени в удобочитаемый вид
     const formatTime = (seconds) => {
-        const mins = Math.floor(seconds / 60);
+        if (seconds < 60) return `${Math.round(seconds)} сек`;
+        
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
         const secs = Math.round(seconds % 60);
-        return `${mins} мин ${secs} сек`;
+        
+        let result = '';
+        if (hours > 0) result += `${hours} ч `;
+        if (minutes > 0) result += `${minutes} мин `;
+        if (secs > 0 && hours < 1) result += `${secs} сек`;
+        
+        return result.trim();
     };
 
     document.getElementById('algorithm-name').textContent = algorithmName;
     document.getElementById('distance-value').textContent = `${(metrics.distance / 1000).toFixed(2)} км`;
-    document.getElementById('execution-time').textContent = `${metrics.execution_time.toFixed(2)} сек`;
-    //document.getElementById('total-time').textContent = formatTime(metrics.estimated_time);
+    
+    // Показываем детализированное время
+    document.getElementById('execution-time').textContent = `
+        ${formatTime(metrics.estimated_time)} 
+        (движение: ${formatTime(metrics.driving_time)}, 
+        разгрузка: ${formatTime(metrics.unloading_time)})
+    `;
+    
     document.getElementById('containers-count').textContent = `${metrics.containers_served} из ${containers.length}`;
 }
 
@@ -168,35 +201,55 @@ document.getElementById('analyze-btn').addEventListener('click', async function(
 
     try {
         // Показываем индикатор загрузки
-        this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Анализ...';
-        this.disabled = true;
+        const loadingOverlay = document.getElementById('loading-overlay');
+        loadingOverlay.style.display = 'flex';
         
-        // Сохраняем параметры запроса для использования на странице анализа
+        // Анимация прогресс-бара
+        const progressBar = document.querySelector('.progress');
+        let progress = 0;
+        const progressInterval = setInterval(() => {
+            progress += 5;
+            if (progress > 90) clearInterval(progressInterval);
+            progressBar.style.width = `${progress}%`;
+        }, 300);
+
+        // Отправляем запрос на анализ
         const requestData = {
             fileName: selectedFileName,
             containers: containers
         };
-        localStorage.setItem('analysisRequestData', JSON.stringify(requestData));
         
-        // Переходим на страницу анализа
-        window.location.href = 'analysis.html';
+        const response = await fetch('http://localhost:5000/api/analysis', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(requestData)
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        
+        // Завершаем анимацию
+        progressBar.style.width = '100%';
+        setTimeout(() => {
+            loadingOverlay.style.display = 'none';
+            
+            // Сохраняем данные и переходим на страницу анализа
+            localStorage.setItem('analysisRequestData', JSON.stringify({
+                request: requestData,
+                response: data
+            }));
+            
+            window.location.href = 'analysis.html';
+        }, 500);
         
     } catch (error) {
         console.error('Ошибка анализа:', error);
+        document.getElementById('loading-overlay').style.display = 'none';
         alert('Ошибка при выполнении анализа: ' + error.message);
-    } finally {
-        this.innerHTML = '<i class="fas fa-chart-line"></i> Анализ';
-        this.disabled = false;
     }
 });
-
-function getAlgorithmEndpoint(algorithm) {
-    const baseUrl = 'http://localhost:5000';
-    switch(algorithm) {
-        case 'ant': return `${baseUrl}/api/route/ant_colony`;
-        case 'genetic': return `${baseUrl}/api/route/genetic`;
-        case 'clarke': return `${baseUrl}/api/route/clarke_wright`;
-        case 'gnn': return `${baseUrl}/gnn-optimize`;
-        default: throw new Error('Неизвестный алгоритм');
-    }
-}

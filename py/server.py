@@ -7,14 +7,15 @@ from algorithms import RouteAlgorithms
 
 # === Конфигурация ===
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-#CONTAINERS_PATH = os.path.join(BASE_DIR, '..', 'data', 'updated_containers.json')
 
 # === Инициализация приложения ===
 app = Flask(__name__)
 CORS(app)
 
 # Глобальные переменные
+route_algorithms = None 
 initialization_complete = Event()
+DEFAULT_CITY = "Улан-Удэ, Россия"
 
 def background_initialization():
     """Фоновая инициализация ресурсов"""
@@ -22,7 +23,12 @@ def background_initialization():
     print("Начало фоновой инициализации...")
     
     try:
-        #route_algorithms = RouteAlgorithms(CONTAINERS_PATH)
+        # Загружаем граф один раз, без контейнеров
+        dummy_file = os.path.join(BASE_DIR, '..', 'data', 'empty.json')
+        if not os.path.exists(dummy_file):
+            with open(dummy_file, 'w', encoding='utf-8') as f:
+                f.write("[]")
+        route_algorithms = RouteAlgorithms(dummy_file, city=DEFAULT_CITY)
         initialization_complete.set()
         print("Фоновая инициализация завершена")
     except Exception as e:
@@ -59,7 +65,7 @@ def gnn_optimize():
         json_path = os.path.join(BASE_DIR, '..', 'data', file_name)
         if not os.path.isfile(json_path):
             return jsonify({'error': f'Файл не найден: {file_name}'}), 400
-        route_algorithms = RouteAlgorithms(json_path)
+        route_algorithms.update_from_file(json_path)
 
         result = route_algorithms.gnn_optimize(containers)
         return jsonify(result)
@@ -78,7 +84,7 @@ def ant_colony_route():
         json_path = os.path.join(BASE_DIR, '..', 'data', file_name)
         if not os.path.isfile(json_path):
             return jsonify({'error': f'Файл не найден: {file_name}'}), 400
-        route_algorithms = RouteAlgorithms(json_path)
+        route_algorithms.update_from_file(json_path)
 
         result = route_algorithms.ant_colony_optimization()
         return jsonify(result)
@@ -96,7 +102,7 @@ def genetic_route():
         json_path = os.path.join(BASE_DIR, '..', 'data', file_name)
         if not os.path.isfile(json_path):
             return jsonify({'error': f'Файл не найден: {file_name}'}), 400
-        route_algorithms = RouteAlgorithms(json_path)
+        route_algorithms.update_from_file(json_path)
 
         result = route_algorithms.genetic_algorithm()
         return jsonify(result)
@@ -113,7 +119,7 @@ def clarke_wright_route():
         json_path = os.path.join(BASE_DIR, '..', 'data', file_name)
         if not os.path.isfile(json_path):
             return jsonify({'error': f'Файл не найден: {file_name}'}), 400
-        route_algorithms = RouteAlgorithms(json_path)
+        route_algorithms.update_from_file(json_path)
 
         result = route_algorithms.clarke_wright()
         return jsonify(result)
@@ -134,7 +140,7 @@ def analysis():
             return jsonify({'error': f'Файл не найден: {file_name}'}), 400
         
         # Создаем экземпляр RouteAlgorithms с указанным файлом
-        route_algorithms = RouteAlgorithms(json_path)
+        route_algorithms.update_from_file(json_path)
         
         # Запускаем все алгоритмы параллельно для ускорения
         from concurrent.futures import ThreadPoolExecutor

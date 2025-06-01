@@ -6,51 +6,24 @@ document.addEventListener('DOMContentLoaded', function() {
 
     ymaps.ready(async function() {
         try {
-            // Получаем и проверяем сохраненные данные
-            const requestDataJson = localStorage.getItem('analysisRequestData');
-            if (!requestDataJson) {
-                throw new Error('Не найдены параметры для анализа. Вернитесь на главную страницу.');
+            // Проверяем наличие сохраненных данных
+            const savedData = localStorage.getItem('analysisRequestData');
+            if (!savedData) {
+                throw new Error('Данные анализа не найдены');
             }
-
-            let requestData;
-            try {
-                requestData = JSON.parse(requestDataJson);
-            } catch (e) {
-                throw new Error('Неверный формат параметров анализа');
-            }
-
-            // Получаем данные для анализа с сервера
-            const response = await fetch('http://localhost:5000/api/analysis', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(requestData) // Преобразуем объект в JSON строку
-            });
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`Ошибка сервера: ${response.status} - ${errorText}`);
-            }
-
-            const routesData = await response.json();
-            console.log('Получены данные анализа:', routesData);
-
-            // Проверяем структуру ответа
-            if (!routesData || typeof routesData !== 'object') {
-                throw new Error('Сервер вернул неверный формат данных');
-            }
-
-            // Инициализация всех карт
+            
+            const { request, response } = JSON.parse(savedData);
+            
+            // Инициализация карт
             const maps = {
                 gnn: initMap('gnn-map'),
                 ant_colony: initMap('ant-map'),
                 genetic: initMap('genetic-map'),
                 clarke_wright: initMap('clarke-map')
             };
-
+            
             // Отображение данных
-            displayAnalysisData(routesData, maps);
+            displayAnalysisData(response, maps);
             
         } catch (error) {
             console.error('Analysis error:', error);
@@ -114,7 +87,7 @@ function displayAnalysisData(routesData, maps) {
                 <td>${getAlgorithmName(apiKey)}</td>
                 <td>${(data.metrics.distance / 1000).toFixed(2)} км</td>
                 <td>${data.metrics.execution_time.toFixed(2)} сек</td>
-                <td>${Math.round(data.metrics.estimated_time / 60)} мин</td>
+                <td>${Math.round((data.metrics.estimated_time / 60)/60)} час</td>
                 <td>${data.metrics.containers_served}</td>
             </tr>
         `;

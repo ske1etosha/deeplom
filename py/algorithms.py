@@ -26,8 +26,45 @@ class RouteAlgorithms:
         self.edge_index = None
         self.gnn_model = None
 
+    def update_containers(self, new_containers: List[Dict]):
+        """Обновляет контейнеры и пересчитывает всё необходимое"""
+        self.containers = new_containers
+        self.attach_nearest_nodes()
+        self.distance_matrix = self.calculate_distance_matrix()
+
+    def update_from_file(self, json_path: str):
+        """Обновляет контейнеры из JSON-файла"""
+        self.containers = self.load_containers(json_path)
+        self.attach_nearest_nodes()
+        self.distance_matrix = self.calculate_distance_matrix()
+
+    # def calculate_metrics(self, route_nodes):
+    #     """Вычисляет метрики для маршрута"""
+    #     if not route_nodes or len(route_nodes) < 2:
+    #         return {
+    #             'distance': 0,
+    #             'estimated_time': 0,
+    #             'containers_served': 0
+    #         }
+        
+    #     # Расчет общего расстояния
+    #     total_distance = 0
+    #     for i in range(len(route_nodes)-1):
+    #         total_distance += self.distance_matrix.get((route_nodes[i], route_nodes[i+1]), 0)
+        
+    #     # Расчет времени (предположим скорость 40 км/ч ~ 11.11 м/с)
+    #     speed_mps = 11.11  # метров в секунду
+    #     unloading_time_per_container = 15 * 60  # 15 минут в секундах
+    #     travel_time = total_distance / speed_mps
+    #     total_time = travel_time + (len(route_nodes) * unloading_time_per_container)
+        
+    #     return {
+    #         'distance': total_distance,  # в метрах
+    #         'estimated_time': total_time,  # в секундах
+    #         'containers_served': len(route_nodes)
+    #     }
     def calculate_metrics(self, route_nodes):
-        """Вычисляет метрики для маршрута"""
+        """Вычисляет метрики для маршрута с реальными параметрами мусоровоза"""
         if not route_nodes or len(route_nodes) < 2:
             return {
                 'distance': 0,
@@ -35,23 +72,37 @@ class RouteAlgorithms:
                 'containers_served': 0
             }
         
-        # Расчет общего расстояния
+        # Параметры мусоровоза (можно вынести в константы класса)
+        AVG_SPEED_KMH = 40  # средняя скорость движения (км/ч)
+        UNLOADING_TIME_PER_CONTAINER = 5 * 60  # время разгрузки одного контейнера (сек)
+        WORKING_DAY_HOURS = 8  # продолжительность рабочего дня (часов)
+        
+        # Расчет общего расстояния в метрах
         total_distance = 0
         for i in range(len(route_nodes)-1):
             total_distance += self.distance_matrix.get((route_nodes[i], route_nodes[i+1]), 0)
         
-        # Расчет времени (предположим скорость 40 км/ч ~ 11.11 м/с)
-        speed_mps = 11.11  # метров в секунду
-        unloading_time_per_container = 15 * 60  # 15 минут в секундах
-        travel_time = total_distance / speed_mps
-        total_time = travel_time + (len(route_nodes) * unloading_time_per_container)
+        # Переводим в километры для расчета времени
+        distance_km = total_distance / 1000
+        
+        # Расчет времени движения (в секундах)
+        driving_time_seconds = (distance_km / AVG_SPEED_KMH) * 3600
+        
+        # Расчет общего времени с учетом разгрузки
+        total_time_seconds = driving_time_seconds + (len(route_nodes) * UNLOADING_TIME_PER_CONTAINER)
+        
+        # Если маршрут превышает рабочий день - показываем предупреждение
+        if total_time_seconds > WORKING_DAY_HOURS * 3600:
+            print(f"Внимание! Маршрут превышает рабочий день ({WORKING_DAY_HOURS} часов)")
         
         return {
             'distance': total_distance,  # в метрах
-            'estimated_time': total_time,  # в секундах
-            'containers_served': len(route_nodes)
+            'estimated_time': total_time_seconds,  # в секундах
+            'containers_served': len(route_nodes),
+            'driving_time': driving_time_seconds,
+            'unloading_time': len(route_nodes) * UNLOADING_TIME_PER_CONTAINER
         }
-
+ 
     def load_containers(self, json_file: str) -> List[Dict]:
         try:
             with open(json_file, 'r', encoding='utf-8') as f:
@@ -72,7 +123,13 @@ class RouteAlgorithms:
 
     def attach_nearest_nodes(self, containers=None):
         containers = containers or self.containers
+        if not containers:
+            return []
+        
         cont_coords = np.array([[c['latitude'], c['longitude']] for c in containers])
+        if cont_coords.shape[0] == 0 or cont_coords.shape[1] != 2:
+            return containers
+
         _, idxs = self.tree.query(cont_coords)
         for i, c in enumerate(containers):
             c['nearest_node'] = self.nodes_list[idxs[i]]
@@ -400,11 +457,11 @@ class RouteAlgorithms:
             hidden_channels=64
         )
         #model_path = 'train_model\\pointer_gnn_model.pt'
-        model_path = 'train_model\\trained_model.pt'
+        model_path = 'py\\trained_model.pt'
         if not os.path.exists(model_path):
             raise FileNotFoundError(f"Модель не найдена по пути: {model_path}")
         #self.gnn_model.load_state_dict(torch.load('train_model\\pointer_gnn_model.pt', map_location='cpu'))
-        self.gnn_model.load_state_dict(torch.load('train_model\\trained_model.pt', map_location='cpu'))
+        self.gnn_model.load_state_dict(torch.load('py\\trained_model.pt', map_location='cpu'))
         self.gnn_model.eval()
         
     def gnn_optimize(self, containers=None):
@@ -530,23 +587,4 @@ class RouteAlgorithms:
         containers = sorted(self.containers, key=lambda x: x['fill_percentage'], reverse=True)
         return [containers[i::n_routes] for i in range(n_routes)]
 
-    def calculate_metrics(self, route_nodes):
-        """Вычисляет метрики для маршрута"""
-        if not route_nodes or len(route_nodes) < 2:
-            return {'distance': 0, 'time': 0}
-        
-        total_distance = 0
-        for i in range(len(route_nodes)-1):
-            total_distance += self.distance_matrix.get((route_nodes[i], route_nodes[i+1]), 0)
-        
-        # Предположим: скорость 40 км/ч = ~11.11 м/с и время выгрузки 5 мин на контейнер
-        speed_mps = 11.11
-        unloading_time = 5 * 60  # секунды
-        
-        total_time = (total_distance / speed_mps) + (len(route_nodes) * unloading_time)
-        
-        return {
-            'distance': total_distance,
-            'time': total_time,
-            'containers_served': len(route_nodes)
-        }
+   

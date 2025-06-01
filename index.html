@@ -38,7 +38,17 @@
         <button class="btn btn-secondary" id="analyze-btn">
             <i class="fas fa-chart-line"></i> Анализ
         </button>
-        
+
+        <div id="loading-overlay" style="display: none;">
+            <div class="loader-container">
+                <div class="loader"></div>
+                <div class="progress-text">Идет анализ маршрутов...</div>
+                <div class="progress-bar">
+                    <div class="progress"></div>
+                </div>
+            </div>
+        </div>
+
         <div class="route-controls">
             <h3>Параметры маршрута:</h3>
             <div>
@@ -66,10 +76,10 @@
                     <span class="stat-label">Время выполнения:</span>
                     <span class="stat-value" id="execution-time">-</span>
                 </div>
-                <!-- <div class="stat-item">
+                <div class="stat-item">
                     <span class="stat-label">Общее время:</span>
                     <span class="stat-value" id="total-time">-</span>
-                </div> -->
+                </div>
                 <div class="stat-item">
                     <span class="stat-label">Контейнеров:</span>
                     <span class="stat-value" id="containers-count">-</span>
