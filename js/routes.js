@@ -133,22 +133,6 @@ function getRouteColor(index) {
     return colors[index % colors.length];
 }
 
-// function updateRouteStats(routeData, algorithmName) {
-//     if (!routeData || !routeData.metrics) return;
-    
-//     const metrics = routeData.metrics;
-//     const formatTime = (seconds) => {
-//         const mins = Math.floor(seconds / 60);
-//         const secs = Math.round(seconds % 60);
-//         return `${mins} мин ${secs} сек`;
-//     };
-
-//     document.getElementById('algorithm-name').textContent = algorithmName;
-//     document.getElementById('distance-value').textContent = `${(metrics.distance / 1000).toFixed(2)} км`;
-//     document.getElementById('execution-time').textContent = `${metrics.execution_time.toFixed(2)} сек`;
-//     document.getElementById('total-time').textContent = formatTime(metrics.estimated_time);
-//     document.getElementById('containers-count').textContent = `${metrics.containers_served} из ${containers.length}`;
-// }
 function updateRouteStats(routeData, algorithmName) {
     if (!routeData || !routeData.metrics) return;
     

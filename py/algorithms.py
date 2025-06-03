@@ -38,31 +38,6 @@ class RouteAlgorithms:
         self.attach_nearest_nodes()
         self.distance_matrix = self.calculate_distance_matrix()
 
-    # def calculate_metrics(self, route_nodes):
-    #     """Вычисляет метрики для маршрута"""
-    #     if not route_nodes or len(route_nodes) < 2:
-    #         return {
-    #             'distance': 0,
-    #             'estimated_time': 0,
-    #             'containers_served': 0
-    #         }
-        
-    #     # Расчет общего расстояния
-    #     total_distance = 0
-    #     for i in range(len(route_nodes)-1):
-    #         total_distance += self.distance_matrix.get((route_nodes[i], route_nodes[i+1]), 0)
-        
-    #     # Расчет времени (предположим скорость 40 км/ч ~ 11.11 м/с)
-    #     speed_mps = 11.11  # метров в секунду
-    #     unloading_time_per_container = 15 * 60  # 15 минут в секундах
-    #     travel_time = total_distance / speed_mps
-    #     total_time = travel_time + (len(route_nodes) * unloading_time_per_container)
-        
-    #     return {
-    #         'distance': total_distance,  # в метрах
-    #         'estimated_time': total_time,  # в секундах
-    #         'containers_served': len(route_nodes)
-    #     }
     def calculate_metrics(self, route_nodes):
         """Вычисляет метрики для маршрута с реальными параметрами мусоровоза"""
         if not route_nodes or len(route_nodes) < 2:
