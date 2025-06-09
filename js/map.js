@@ -11,7 +11,7 @@ function initMap() {
         map.events.add('click', e => addManualContainer(e.get('coords')));
     });
 }
-
+//=================================================================================//
 function addPlacemark(container) {
     let color;
     if (container.fillLevel >= 80) {
@@ -50,7 +50,7 @@ function clearMap() {
     // }
     // document.getElementById('route-info').innerHTML = 'Маршруты не построены';
 }
-
+//=================================================================================//
 function addManualContainer(coords) {
     const fillLevel = prompt("Введите заполненность контейнера в % (0-100):");
     if (fillLevel === null || isNaN(fillLevel) || fillLevel < 0 || fillLevel > 100) {

@@ -1,5 +1,6 @@
 let routes = [];
 let currentRouteIndex = -1;
+let selectedFileName = null;
 
 async function optimizeRoutes() {
     if (containers.length === 0) {
@@ -7,35 +8,10 @@ async function optimizeRoutes() {
         return;
     }
 
-    const maxContainers = parseInt(document.getElementById("max-containers").value) || 20;
     const algorithm = document.getElementById("algorithm-select").value;
 
-    if (maxContainers <= 0 || isNaN(maxContainers)) {
-        alert("Пожалуйста, укажите корректную вместимость мусоровоза!");
-        return;
-    }
-
     try {
-        let endpoint;
-        const baseUrl = 'http://localhost:5000'; // Базовый URL Flask сервера
-        
-        switch(algorithm) {
-            case 'ant':
-                endpoint = `${baseUrl}/api/route/ant_colony`;
-                break;
-            case 'genetic':
-                endpoint = `${baseUrl}/api/route/genetic`;
-                break;
-            case 'clarke':
-                endpoint = `${baseUrl}/api/route/clarke_wright`;
-                break;
-            case 'gnn':
-                endpoint = `${baseUrl}/gnn-optimize`;
-                break;
-            default:
-                throw new Error('Неизвестный алгоритм');
-        }
-
+        const endpoint = getAlgorithmEndpoint(algorithm);
         const response = await fetch(endpoint, {
             method: 'POST',
             headers: { 
@@ -43,8 +19,8 @@ async function optimizeRoutes() {
                 'Accept': 'application/json'
             },
             body: JSON.stringify({ 
-                containers: containers, 
-                maxContainers: maxContainers 
+                containers: containers,
+                fileName: selectedFileName
             })
         });
 
@@ -58,22 +34,26 @@ async function optimizeRoutes() {
             alert("Алгоритм не вернул ни одного маршрута.");
             return;
         }
-
-        routes = data.routes.map((r, i) => {
-            const containersForRoute = containers.filter(c =>
-                r.nodes.includes(c.nearest_node)
-            );
-            return {
-                index: i,
-                containers: containersForRoute,
-                routePoints: r.points,
-                color: getRouteColor(i)
-            };
-        });
+        
+        // Нормализуем структуру данных
+        routes = [{
+            routePoints: data.routes[0].points,
+            nodes: data.routes[0].nodes,
+            containers: containers.filter(c => 
+                data.routes[0].nodes.includes(c.nearest_node)
+            ),
+            color: getRouteColor(0),
+            metrics: data.metrics || {
+                distance: 0,
+                estimated_time: 0,
+                containers_served: 0,
+                execution_time: 0
+            }
+        }];
 
         console.log("Маршруты получены:", routes);
         clearMap();
-        updateRouteSelector();
+        updateRouteStats(data, getAlgorithmName(algorithm));
         showRoute(0);
 
     } catch (err) {
@@ -82,45 +62,191 @@ async function optimizeRoutes() {
     }
 }
 
-function updateRouteSelector() {
-    const routeInfo = document.getElementById('route-info');
-    routeInfo.innerHTML = `
-        <strong>Построено маршрутов:</strong> ${routes.length}
-        <select id="route-selector" class="route-selector">
-            ${routes.map((r, i) => `<option value="${i}">Маршрут ${i + 1} (${r.containers.length} контейнеров)</option>`).join('')}
-        </select>
-    `;
-    document.getElementById('route-selector').addEventListener('change', (e) => {
-        showRoute(parseInt(e.target.value));
-    });
+function getAlgorithmEndpoint(algorithm) {
+    const baseUrl = 'http://localhost:5000';
+    switch(algorithm) {
+        case 'ant': return `${baseUrl}/api/route/ant_colony`;
+        case 'genetic': return `${baseUrl}/api/route/genetic`;
+        case 'clarke': return `${baseUrl}/api/route/clarke_wright`;
+        case 'gnn': return `${baseUrl}/gnn-optimize`;
+        default: throw new Error('Неизвестный алгоритм');
+    }
 }
 
 function showRoute(index) {
-    if (!routes[index]) {
-        alert("Выбранный маршрут не найден.");
+    // Проверка наличия routes и корректности индекса
+    if (!routes || !Array.isArray(routes) || routes.length === 0) {
+        console.error("Маршруты не определены или пусты");
+        alert("Нет данных о маршрутах");
         return;
     }
 
-    currentRouteIndex = index;
+    if (index < 0 || index >= routes.length) {
+        console.error(`Неверный индекс маршрута: ${index}`);
+        alert("Выбран несуществующий маршрут");
+        return;
+    }
+
     const route = routes[index];
+    currentRouteIndex = index;
+    
+    try {
+        // Очищаем карту
+        clearMap();
 
-    clearMap();
+        // Проверяем наличие точек маршрута
+        if (!route.routePoints || route.routePoints.length === 0) {
+            throw new Error("Маршрут не содержит точек");
+        }
 
-    const polyline = new ymaps.Polyline(route.routePoints, {}, {
-        strokeColor: route.color,
-        strokeWidth: 5,
-        strokeOpacity: 0.8
-    });
-    map.geoObjects.add(polyline);
+        // Отрисовываем линию маршрута
+        const polyline = new ymaps.Polyline(route.routePoints, {}, {
+            strokeColor: route.color || '#FF0000',
+            strokeWidth: 5,
+            strokeOpacity: 0.8
+        });
+        map.geoObjects.add(polyline);
 
-    route.containers.forEach(container => {
-        addPlacemark(container);
-    });
+        // Центрируем карту на маршруте
+        map.setBounds(polyline.geometry.getBounds());
 
-    updateContainerList(route.containers);
+        // Отображаем все контейнеры
+        containers.forEach(container => {
+            addPlacemark(container);
+        });
+
+        // Обновляем список контейнеров для маршрута
+        if (route.containers && Array.isArray(route.containers)) {
+            updateContainerList(route.containers);
+        } else {
+            console.warn("Маршрут не содержит данных о контейнерах");
+        }
+
+    } catch (error) {
+        console.error("Ошибка при отображении маршрута:", error);
+        alert("Ошибка при построении маршрута: " + error.message);
+    }
 }
 
 function getRouteColor(index) {
     const colors = ['#FF0000', '#00FF00', '#0000FF', '#FF00FF', '#FFA500', '#00CED1'];
     return colors[index % colors.length];
 }
+
+function updateRouteStats(routeData, algorithmName) {
+    if (!routeData || !routeData.metrics) return;
+    
+    const metrics = routeData.metrics;
+    
+    // Форматирование времени
+    const formatTime = (seconds) => {
+        if (seconds < 60) return `${Math.round(seconds)} сек`;
+        
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        
+        let result = '';
+        if (hours > 0) result += `${hours} ч `;
+        result += `${minutes} мин`;
+        
+        return result.trim();
+    };
+
+    // Обновляем основные значения
+    document.getElementById('algorithm-name').textContent = algorithmName;
+    document.getElementById('distance-value').textContent = `${(metrics.distance / 1000).toFixed(2)} км`;
+    document.getElementById('execution-time').textContent = `${metrics.execution_time.toFixed(2)} сек`;
+    document.getElementById('total-time-value').textContent = formatTime(metrics.estimated_time);
+    document.getElementById('containers-count').textContent = `${metrics.containers_served} из ${containers.length}`;
+    
+    // Заполняем детали (скрытые)
+    document.getElementById('driving-time-value').textContent = formatTime(metrics.driving_time || 0);
+    document.getElementById('unloading-time-value').textContent = formatTime(metrics.unloading_time || 0);
+    document.getElementById('algorithm-time-value').textContent = `${metrics.execution_time.toFixed(2)} сек`;
+    
+    // Обработчик клика для показа деталей
+    document.getElementById('time-label').addEventListener('click', function() {
+        const detailsElement = document.getElementById('time-details');
+        if (detailsElement.style.display === 'none') {
+            detailsElement.style.display = 'block';
+            this.textContent = 'Общее время маршрута (скрыть детали):';
+        } else {
+            detailsElement.style.display = 'none';
+            this.textContent = 'Общее время маршрута (показать детали):';
+        }
+    });
+    
+    // Добавляем всплывающую подсказку
+    document.getElementById('time-label').title = 'Кликните для просмотра деталей времени';
+}
+
+function getAlgorithmName(value) {
+    const names = {
+        'gnn': 'GNN Оптимизация',
+        'ant': 'Муравьиный алгоритм',
+        'genetic': 'Генетический алгоритм',
+        'clarke': 'Кларка-Райта'
+    };
+    return names[value] || value;
+}
+
+document.getElementById('analyze-btn').addEventListener('click', async function() {
+    if (containers.length === 0) {
+        alert('Нет контейнеров для анализа');
+        return;
+    }
+
+    try {
+        // Показываем индикатор загрузки
+        const loadingOverlay = document.getElementById('loading-overlay');
+        loadingOverlay.style.display = 'flex';
+        
+        // Анимация прогресс-бара
+        const progressBar = document.querySelector('.progress');
+        let progress = 0;
+        const progressInterval = setInterval(() => {
+            progress += 5;
+            if (progress > 90) clearInterval(progressInterval);
+            progressBar.style.width = `${progress}%`;
+        }, 300);
+
+        // Отправляем запрос на анализ
+        const requestData = {
+            fileName: selectedFileName,
+            containers: containers
+        };
+        
+        const response = await fetch('http://localhost:5000/api/analysis', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(requestData)
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        
+        // Завершаем анимацию
+        progressBar.style.width = '100%';
+        setTimeout(() => {
+            loadingOverlay.style.display = 'none';
+            
+            // Сохраняем данные и переходим на страницу анализа
+            localStorage.setItem('analysisRequestData', JSON.stringify({
+                request: requestData,
+                response: data
+            }));
+            
+            window.location.href = 'analysis.html';
+        }, 500);
+        
+    } catch (error) {
+        console.error('Ошибка анализа:', error);
+        document.getElementById('loading-overlay').style.display = 'none';
+        alert('Ошибка при выполнении анализа: ' + error.message);
+    }
+});

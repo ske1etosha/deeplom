@@ -44,7 +44,7 @@ function clearAll() {
         document.getElementById('route-info').innerHTML = 'Маршруты не построены';
     }
 }
-
+//========================================================================//
 function updateContainerList(containersToShow = containers) {
     const list = document.getElementById('container-list');
     document.getElementById('counter').textContent = containersToShow.length;
@@ -71,7 +71,7 @@ function updateContainerList(containersToShow = containers) {
         list.appendChild(item);
     });
 }
-
+//========================================================================//
 function getFillClass(percentage) {
     if (percentage >= 80) return 'fill-high';
     if (percentage >= 40) return 'fill-medium';
