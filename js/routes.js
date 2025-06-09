@@ -138,33 +138,46 @@ function updateRouteStats(routeData, algorithmName) {
     
     const metrics = routeData.metrics;
     
-    // Форматирование времени в удобочитаемый вид
+    // Форматирование времени
     const formatTime = (seconds) => {
         if (seconds < 60) return `${Math.round(seconds)} сек`;
         
         const hours = Math.floor(seconds / 3600);
         const minutes = Math.floor((seconds % 3600) / 60);
-        const secs = Math.round(seconds % 60);
         
         let result = '';
         if (hours > 0) result += `${hours} ч `;
-        if (minutes > 0) result += `${minutes} мин `;
-        if (secs > 0 && hours < 1) result += `${secs} сек`;
+        result += `${minutes} мин`;
         
         return result.trim();
     };
 
+    // Обновляем основные значения
     document.getElementById('algorithm-name').textContent = algorithmName;
     document.getElementById('distance-value').textContent = `${(metrics.distance / 1000).toFixed(2)} км`;
-    
-    // Показываем детализированное время
-    document.getElementById('execution-time').textContent = `
-        ${formatTime(metrics.estimated_time)} 
-        (движение: ${formatTime(metrics.driving_time)}, 
-        разгрузка: ${formatTime(metrics.unloading_time)})
-    `;
-    
+    document.getElementById('execution-time').textContent = `${metrics.execution_time.toFixed(2)} сек`;
+    document.getElementById('total-time-value').textContent = formatTime(metrics.estimated_time);
     document.getElementById('containers-count').textContent = `${metrics.containers_served} из ${containers.length}`;
+    
+    // Заполняем детали (скрытые)
+    document.getElementById('driving-time-value').textContent = formatTime(metrics.driving_time || 0);
+    document.getElementById('unloading-time-value').textContent = formatTime(metrics.unloading_time || 0);
+    document.getElementById('algorithm-time-value').textContent = `${metrics.execution_time.toFixed(2)} сек`;
+    
+    // Обработчик клика для показа деталей
+    document.getElementById('time-label').addEventListener('click', function() {
+        const detailsElement = document.getElementById('time-details');
+        if (detailsElement.style.display === 'none') {
+            detailsElement.style.display = 'block';
+            this.textContent = 'Общее время маршрута (скрыть детали):';
+        } else {
+            detailsElement.style.display = 'none';
+            this.textContent = 'Общее время маршрута (показать детали):';
+        }
+    });
+    
+    // Добавляем всплывающую подсказку
+    document.getElementById('time-label').title = 'Кликните для просмотра деталей времени';
 }
 
 function getAlgorithmName(value) {

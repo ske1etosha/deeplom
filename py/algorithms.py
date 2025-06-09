@@ -38,46 +38,88 @@ class RouteAlgorithms:
         self.attach_nearest_nodes()
         self.distance_matrix = self.calculate_distance_matrix()
 
+    # def calculate_metrics(self, route_nodes):
+    #     """Вычисляет метрики для маршрута с реальными параметрами мусоровоза"""
+    #     if not route_nodes or len(route_nodes) < 2:
+    #         return {
+    #             'distance': 0,
+    #             'estimated_time': 0,
+    #             'containers_served': 0
+    #         }
+        
+    #     # Параметры мусоровоза (можно вынести в константы класса)
+    #     AVG_SPEED_KMH = 40  # средняя скорость движения (км/ч)
+    #     UNLOADING_TIME_PER_CONTAINER = 5 * 60  # время разгрузки одного контейнера (сек)
+    #     WORKING_DAY_HOURS = 8  # продолжительность рабочего дня (часов)
+        
+    #     # Расчет общего расстояния в метрах
+    #     total_distance = 0
+    #     for i in range(len(route_nodes)-1):
+    #         total_distance += self.distance_matrix.get((route_nodes[i], route_nodes[i+1]), 0)
+        
+    #     # Переводим в километры для расчета времени
+    #     distance_km = total_distance / 1000
+        
+    #     # Расчет времени движения (в секундах)
+    #     driving_time_seconds = (distance_km / AVG_SPEED_KMH) * 3600
+        
+    #     # Расчет общего времени с учетом разгрузки
+    #     total_time_seconds = driving_time_seconds + (len(route_nodes) * UNLOADING_TIME_PER_CONTAINER)
+        
+    #     # Если маршрут превышает рабочий день - показываем предупреждение
+    #     if total_time_seconds > WORKING_DAY_HOURS * 3600:
+    #         print(f"Внимание! Маршрут превышает рабочий день ({WORKING_DAY_HOURS} часов)")
+        
+    #     return {
+    #         'distance': total_distance,  # в метрах
+    #         'estimated_time': total_time_seconds,  # в секундах
+    #         'containers_served': len(route_nodes),
+    #         'driving_time': driving_time_seconds,
+    #         'unloading_time': len(route_nodes) * UNLOADING_TIME_PER_CONTAINER
+    #     }
     def calculate_metrics(self, route_nodes):
-        """Вычисляет метрики для маршрута с реальными параметрами мусоровоза"""
+        """Вычисляет метрики для маршрута с дополнительными показателями"""
         if not route_nodes or len(route_nodes) < 2:
             return {
                 'distance': 0,
                 'estimated_time': 0,
-                'containers_served': 0
+                'containers_served': 0,
+                'driving_time': 0,
+                'unloading_time': 0,
+                'avg_speed': 0,
+                'efficiency': 0
             }
         
-        # Параметры мусоровоза (можно вынести в константы класса)
-        AVG_SPEED_KMH = 40  # средняя скорость движения (км/ч)
-        UNLOADING_TIME_PER_CONTAINER = 5 * 60  # время разгрузки одного контейнера (сек)
-        WORKING_DAY_HOURS = 8  # продолжительность рабочего дня (часов)
+        # Параметры расчета
+        AVG_SPEED_KMH = 40  # средняя скорость движения
+        UNLOADING_TIME_PER_CONTAINER = 5 * 60  # 5 минут на контейнер
         
-        # Расчет общего расстояния в метрах
-        total_distance = 0
-        for i in range(len(route_nodes)-1):
-            total_distance += self.distance_matrix.get((route_nodes[i], route_nodes[i+1]), 0)
+        # Расчет расстояния
+        total_distance = sum(
+            self.distance_matrix.get((route_nodes[i], route_nodes[i+1]), 0)
+            for i in range(len(route_nodes)-1)
+        )
         
-        # Переводим в километры для расчета времени
+        # Расчет времени
         distance_km = total_distance / 1000
+        driving_time = (distance_km / AVG_SPEED_KMH) * 3600  # в секундах
+        unloading_time = len(route_nodes) * UNLOADING_TIME_PER_CONTAINER
+        total_time = driving_time + unloading_time
         
-        # Расчет времени движения (в секундах)
-        driving_time_seconds = (distance_km / AVG_SPEED_KMH) * 3600
-        
-        # Расчет общего времени с учетом разгрузки
-        total_time_seconds = driving_time_seconds + (len(route_nodes) * UNLOADING_TIME_PER_CONTAINER)
-        
-        # Если маршрут превышает рабочий день - показываем предупреждение
-        if total_time_seconds > WORKING_DAY_HOURS * 3600:
-            print(f"Внимание! Маршрут превышает рабочий день ({WORKING_DAY_HOURS} часов)")
+        # Дополнительные метрики
+        avg_speed = AVG_SPEED_KMH  # можно сделать динамическим
+        efficiency = (len(route_nodes) / (total_time / 3600)) if total_time > 0 else 0  # контейнеров в час
         
         return {
-            'distance': total_distance,  # в метрах
-            'estimated_time': total_time_seconds,  # в секундах
+            'distance': total_distance,
+            'estimated_time': total_time,
             'containers_served': len(route_nodes),
-            'driving_time': driving_time_seconds,
-            'unloading_time': len(route_nodes) * UNLOADING_TIME_PER_CONTAINER
+            'driving_time': driving_time,
+            'unloading_time': unloading_time,
+            'avg_speed': avg_speed,
+            'efficiency': efficiency
         }
- 
+    
     def load_containers(self, json_file: str) -> List[Dict]:
         try:
             with open(json_file, 'r', encoding='utf-8') as f:

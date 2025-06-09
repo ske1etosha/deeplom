@@ -44,53 +44,83 @@ function initMap(containerId) {
 }
 
 function displayAnalysisData(routesData, maps) {
-    const metricsBody = document.getElementById('metrics-body');
-    metricsBody.innerHTML = '';
-
-    // Соответствие ключей из ответа сервера и идентификаторов карт
-    const algorithmMap = {
-        'ant_colony': 'ant_colony',
-        'genetic': 'genetic',
-        'clarke_wright': 'clarke_wright',
-        'gnn': 'gnn'
-    };
-
-    Object.entries(algorithmMap).forEach(([apiKey, mapKey]) => {
-        const data = routesData[apiKey];
+    const container = document.querySelector('.algorithms-comparison');
+    container.innerHTML = '';
+    
+    Object.entries(routesData).forEach(([algorithmKey, data]) => {
+        if (!data || data.error || !data?.routes?.[0]?.points) return;
         
-        if (!data || data.error || !data?.routes?.[0]?.points) {
-            console.warn(`No valid route data for ${apiKey}`, data);
-            // Добавляем строку с ошибкой в таблицу
-            metricsBody.innerHTML += `
-                <tr class="error-row">
-                    <td>${getAlgorithmName(apiKey)}</td>
-                    <td colspan="4">${data?.error || 'Нет данных о маршруте'}</td>
-                </tr>
-            `;
-            return;
-        }
-
+        const algorithmName = getAlgorithmName(algorithmKey);
+        const metrics = data.metrics || {};
+        
+        // Форматирование времени
+        const formatTime = (seconds) => {
+            if (!seconds) return '0 сек';
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            const secs = Math.round(seconds % 60);
+            
+            let result = '';
+            if (hours > 0) result += `${hours} ч `;
+            if (minutes > 0) result += `${minutes} мин `;
+            if (secs > 0 && hours === 0) result += `${secs} сек`;
+            return result.trim() || '0 сек';
+        };
+        
+        // Создаем карточку алгоритма
+        const card = document.createElement('div');
+        card.className = 'algorithm-card';
+        card.innerHTML = `
+            <h3>${algorithmName}</h3>
+            <div class="time-summary" onclick="this.nextElementSibling.classList.toggle('active')">
+                🕒 Общее время: <span class="metric-value">${formatTime(metrics.estimated_time)}</span>
+            </div>
+            <div class="time-details">
+                <div class="time-detail-row">
+                    <span>Движение:</span>
+                    <span class="metric-value">${formatTime(metrics.driving_time)}</span>
+                </div>
+                <div class="time-detail-row">
+                    <span>Разгрузка:</span>
+                    <span class="metric-value">${formatTime(metrics.unloading_time)}</span>
+                </div>
+                <div class="time-detail-row">
+                    <span>Время алгоритма:</span>
+                    <span class="metric-value">${metrics.execution_time?.toFixed(2) || '0'} сек</span>
+                </div>
+            </div>
+            <div class="other-metrics">
+                <div class="metric-item">
+                    <span class="metric-label">Длина маршрута</span>
+                    <span class="metric-value">${(metrics.distance / 1000).toFixed(2)} км</span>
+                </div>
+                <div class="metric-item">
+                    <span class="metric-label">Контейнеров</span>
+                    <span class="metric-value">${metrics.containers_served || 0}</span>
+                </div>
+                <div class="metric-item">
+                    <span class="metric-label">Скорость</span>
+                    <span class="metric-value">${metrics.avg_speed ? metrics.avg_speed.toFixed(1) : '?'} км/ч</span>
+                </div>
+                <div class="metric-item">
+                    <span class="metric-label">Эффективность</span>
+                    <span class="metric-value">${metrics.efficiency ? metrics.efficiency.toFixed(1) : '?'} конт/час</span>
+                </div>
+            </div>
+        `;
+        
+        container.appendChild(card);
+        
         // Добавляем маршрут на карту
         const route = data.routes[0];
         const polyline = new ymaps.Polyline(route.points, {}, {
-            strokeColor: getRouteColor(apiKey),
+            strokeColor: getRouteColor(algorithmKey),
             strokeWidth: 5,
             strokeOpacity: 0.7
         });
         
-        maps[mapKey].geoObjects.add(polyline);
-        maps[mapKey].setBounds(polyline.geometry.getBounds());
-
-        // Добавляем метрики в таблицу
-        metricsBody.innerHTML += `
-            <tr>
-                <td>${getAlgorithmName(apiKey)}</td>
-                <td>${(data.metrics.distance / 1000).toFixed(2)} км</td>
-                <td>${data.metrics.execution_time.toFixed(2)} сек</td>
-                <td>${Math.round((data.metrics.estimated_time / 60)/60)} час</td>
-                <td>${data.metrics.containers_served}</td>
-            </tr>
-        `;
+        maps[algorithmKey].geoObjects.add(polyline);
+        maps[algorithmKey].setBounds(polyline.geometry.getBounds());
     });
 }
 
@@ -113,3 +143,8 @@ function getRouteColor(algorithm) {
     };
     return colors[algorithm] || '#000000';
 }
+
+// Делаем функцию доступной глобально для обработки кликов
+window.toggleTimeDetails = function(element) {
+    element.nextElementSibling.classList.toggle('active');
+};

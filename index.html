@@ -77,8 +77,13 @@
                     <span class="stat-value" id="execution-time">-</span>
                 </div>
                 <div class="stat-item">
-                    <span class="stat-label">Общее время:</span>
-                    <span class="stat-value" id="total-time">-</span>
+                    <span class="stat-label clickable" id="time-label">Общее время маршрута:</span>
+                    <span class="stat-value" id="total-time-value">-</span>
+                    <div class="time-details" id="time-details" style="display: none;">
+                        <div>Движение: <span id="driving-time-value">-</span></div>
+                        <div>Разгрузка: <span id="unloading-time-value">-</span></div>
+                        <div>Алгоритм: <span id="algorithm-time-value">-</span></div>
+                    </div>
                 </div>
                 <div class="stat-item">
                     <span class="stat-label">Контейнеров:</span>

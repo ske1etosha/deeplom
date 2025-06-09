@@ -410,3 +410,96 @@ body {
     font-size: 16px;
     color: #333;
 }
+
+/* Стили для времени */
+.clickable {
+    cursor: pointer;
+    text-decoration: underline;
+    color: var(--primary-color);
+}
+
+.clickable:hover {
+    color: var(--secondary-color);
+}
+
+.time-details {
+    background-color: #f8f9fa;
+    padding: 8px;
+    border-radius: 4px;
+    margin-top: 5px;
+    border-left: 3px solid var(--primary-color);
+    font-size: 0.9em;
+}
+
+.time-details div {
+    margin: 3px 0;
+}
+
+/* Стили для страницы анализа */
+.algorithms-comparison {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 15px;
+    margin-top: 20px;
+}
+
+.algorithm-card {
+    background: white;
+    border-radius: 8px;
+    padding: 15px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+.algorithm-card h3 {
+    margin-top: 0;
+    color: var(--primary-color);
+    border-bottom: 1px solid #eee;
+    padding-bottom: 10px;
+}
+
+.time-summary {
+    font-size: 1.1em;
+    font-weight: 500;
+    margin: 10px 0;
+    cursor: pointer;
+    color: var(--secondary-color);
+}
+
+.time-details {
+    background: #f8f9fa;
+    padding: 10px;
+    border-radius: 5px;
+    margin-top: 8px;
+    display: none;
+}
+
+.time-details.active {
+    display: block;
+}
+
+.time-detail-row {
+    display: flex;
+    justify-content: space-between;
+    margin: 5px 0;
+}
+
+.metric-value {
+    font-weight: 600;
+}
+
+.other-metrics {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.metric-item {
+    font-size: 0.9em;
+}
+
+.metric-item .metric-label {
+    color: #666;
+    display: block;
+    margin-bottom: 3px;
+}
